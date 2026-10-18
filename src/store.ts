@@ -1,0 +1,132 @@
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { UsageError } from "./errors";
+
+export interface Config {
+  /** Server root, for example https://wf.example.com */
+  url?: string;
+  /** Profile to unlock after login when the server has several. */
+  profile?: string;
+}
+
+/** Cached login state. Never holds the password. */
+export interface Session {
+  url: string;
+  token?: string;
+  scopeId?: string;
+  profileId?: string;
+  browserId?: string;
+}
+
+export function configDir(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.WF_CONFIG_DIR) return env.WF_CONFIG_DIR;
+  const base = env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(base, "wf");
+}
+
+const configPath = () => join(configDir(), "config.json");
+const sessionPath = () => join(configDir(), "session.json");
+const agentTokenPath = () => join(configDir(), "agent-token.json");
+
+function readJson<T>(path: string): T | undefined {
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as T;
+  } catch {
+    throw new UsageError(`Cannot parse ${path}. Fix or delete the file.`);
+  }
+}
+
+/**
+ * Writes to a temporary file in the same directory, then renames it over
+ * `path`. A crash or a full disk mid-write leaves the old file intact, never
+ * a truncated one. The temporary file has `mode` from the start, so a secret
+ * is never readable by others, even briefly.
+ */
+function writeJson(path: string, value: unknown, mode: number): void {
+  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode, flag: "w" });
+    // The umask can narrow the mode on creation, and a stale temp file keeps its old one.
+    chmodSync(tmp, mode);
+    renameSync(tmp, path);
+  } catch (error) {
+    rmSync(tmp, { force: true });
+    throw error;
+  }
+}
+
+export function loadConfig(): Config {
+  return readJson<Config>(configPath()) ?? {};
+}
+
+export function saveConfig(config: Config): void {
+  writeJson(configPath(), config, 0o644);
+}
+
+export function loadSession(): Session | undefined {
+  return readJson<Session>(sessionPath());
+}
+
+export function saveSession(session: Session): void {
+  writeJson(sessionPath(), session, 0o600);
+}
+
+export function clearSession(): void {
+  rmSync(sessionPath(), { force: true });
+}
+
+/**
+ * A personal access token for the server's /mcp endpoint, from
+ * `wf agent-token create`. Kept apart from the session, so login and logout
+ * do not lose it while it stays valid on the server.
+ */
+export interface AgentToken {
+  url: string;
+  profileId?: string;
+  id: string;
+  name: string;
+  token: string;
+  scopes: string[];
+  expiresAt?: string | null;
+}
+
+export function loadAgentToken(): AgentToken | undefined {
+  return readJson<AgentToken>(agentTokenPath());
+}
+
+export function saveAgentToken(token: AgentToken): void {
+  writeJson(agentTokenPath(), token, 0o600);
+}
+
+export function clearAgentToken(): void {
+  rmSync(agentTokenPath(), { force: true });
+}
+
+export function normalizeUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new UsageError(
+      `Invalid server URL: ${raw}`,
+      "Use a full URL, for example http://localhost:8088",
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new UsageError(`Server URL must use http or https: ${raw}`);
+  }
+  // Accept a pasted .../api/v1 and keep any reverse-proxy path prefix.
+  const path = url.pathname.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
+  return `${url.origin}${path}`;
+}

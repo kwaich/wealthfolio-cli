@@ -1,0 +1,48 @@
+{
+  "name": "wealthfolio-cli",
+  "version": "0.1.0",
+  "description": "Command line client (wf) for a self-hosted Wealthfolio server",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "bin": {
+    "wf": "dist/wf.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "UPSTREAM_TAG"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "tsup"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "dependencies": {
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^20.19.43",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^4.1.12"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "wealthfolio-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Command line client (wf) for a self-hosted Wealthfolio server",
   "type": "module",
   "license": "AGPL-3.0-only",

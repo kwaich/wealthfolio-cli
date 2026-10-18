@@ -73,6 +73,13 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
   round them.
 - Dates are `YYYY-MM-DD` or RFC 3339.
 - Add `--table` only to show something to a person. Parse JSON yourself.
+- `wf spending report` defaults to this month. It returns `current` and
+  `prior` totals (`income`, `outflow`, `saved`, `net`) and breakdowns by
+  category and day. `--account <id>` repeats.
+- `wf budget` returns `state` (groups, targets) and `computed` (`totals`,
+  per-group rows). All zeros with empty `groupRows` means no budget is set up
+  for that month; say so instead of reporting zero spending.
+- `wf holdings --account <id> --include-closed` also lists sold-out positions.
 
 For anything without its own command:
 
@@ -162,6 +169,23 @@ wf sync --wait                       # refresh quotes, then recalculate
 wf sync --asset <id> --recent-days 30 --wait
 wf alt-asset value <assetId> 450000 --date 2026-10-01 --wait   # property, car, ...
 ```
+
+### Accounts, goals and other records
+
+These have no curated command and no `--dry-run`. Use `wf call` with the
+schema, and treat each one as a raw write under rule 1: show the exact payload
+and get a yes first.
+
+```sh
+wf schema create_account             # fields the web app sends
+wf call create_account --args '{"account":{...}}'
+wf call update_account --args '{"accountUpdate":{"id":"<id>",...}}'
+```
+
+`update_account` needs `name`, `accountType`, `trackingMode` and `isArchived`
+every time. Read the account with `wf accounts` and send back the fields you
+don't mean to change. Don't run `delete_account` unless the user names the
+account; it can't be undone.
 
 ## When a write fails
 

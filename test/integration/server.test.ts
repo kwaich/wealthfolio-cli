@@ -1,5 +1,5 @@
-// End-to-end against a real server (scripts/test-server.sh up), through the
-// built binary. Needs `pnpm build` first.
+// End-to-end against a real server (scripts/test-server.sh up, which turns on
+// the /mcp endpoint), through the built binary. Needs `pnpm build` first.
 //
 //   WF_TEST_URL, WF_TEST_PASSWORD  required
 //   WF_TEST_REFRESH=1              also check the sliding-session refresh
@@ -139,6 +139,48 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
     expect(bad.stderr).toContain("wf schema create_account");
   });
 
+  it("updates the activity through the server's MCP tools, after a preview", async () => {
+    const token = await wfJson<{ scopes: string[]; mcp: { ok: boolean } }>(
+      "agent-token",
+      "create",
+      "--expires-days",
+      "1",
+    );
+    expect(token.mcp.ok).toBe(true);
+    expect(token.scopes).toContain("activities:write");
+
+    const preview = await wfJson<{
+      rows: { status: string; changes: { field: string; current: unknown; proposed: unknown }[] }[];
+    }>("activity", "update", activityId, "--amount", "1200", "--notes", "corrected", "--dry-run");
+    expect(preview.rows[0]!.status).toBe("ready");
+    expect(preview.rows[0]!.changes).toEqual(
+      expect.arrayContaining([
+        { field: "amount", current: "1000", proposed: "1200" },
+        { field: "notes", current: null, proposed: "corrected" },
+      ]),
+    );
+    const same = await wf(["activity", "update", activityId, "--amount", "1000", "--dry-run"]);
+    expect(same.code).toBe(1);
+    expect(same.stdout).toContain("Nothing to change");
+
+    const applied = await wfJson<{
+      updated: { changes: { field: string; after: unknown }[] }[];
+      errors: unknown[];
+      wait: { status: string };
+    }>("activity", "update", activityId, "--amount", "1200", "--wait", "--wait-timeout", "60");
+    expect(applied.errors).toEqual([]);
+    expect(applied.updated[0]!.changes).toContainEqual(
+      expect.objectContaining({ field: "amount", after: "1200" }),
+    );
+    expect(applied.wait.status).toBe("complete");
+    const holdings = await wfJson<{ holdingType: string; quantity: number }[]>(
+      "holdings",
+      "--account",
+      accountId,
+    );
+    expect(holdings.find((h) => h.holdingType === "cash")!.quantity).toBe(1200);
+  });
+
   it("voids and restores the activity; holdings follow", async () => {
     const cash = async () =>
       (await wfJson<{ holdingType: string }[]>("holdings", "--account", accountId)).length;
@@ -225,6 +267,12 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
     },
     60_000,
   );
+
+  it("revokes the agent token", async () => {
+    expect(await wfJson("agent-token", "delete")).toMatchObject({ deleted: true, revoked: true });
+    const res = await wf(["activity", "update", activityId || "x", "--fee", "1", "--dry-run"]);
+    expect(res.code).toBe(3);
+  });
 
   it("logout ends the session", async () => {
     expect((await wf(["logout"])).code).toBe(0);

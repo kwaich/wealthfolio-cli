@@ -1,4 +1,5 @@
-// Activity commands. Search, delete, void and restore follow the rules of the
+// Activity commands. Update (activity-update.ts) runs the server's own MCP
+// tools. Search, delete, void and restore follow the rules of the
 // MCP tools search_activities, prepare/commit_activity_deletions and the void
 // field of prepare/commit_activity_updates, over the REST commands the web app
 // uses. Each write command previews with --dry-run and changes nothing then.
@@ -8,6 +9,7 @@ import { globals, open, output } from "../context";
 import { UsageError, WfError } from "../errors";
 import type { WaitResult } from "../events";
 import { addWaitOptions, withWait, type WaitOptions } from "../wait";
+import { registerActivityUpdate } from "./activity-update";
 import { collect, dateArg, intArg } from "./args";
 
 /** Max ids per call, as the MCP tools. */
@@ -326,7 +328,7 @@ const ACTIVITY_TYPES = [
 export function registerActivities(program: Command): void {
   const activity = program
     .command("activity")
-    .description("Search, delete, void and restore activities");
+    .description("Search, update, delete, void and restore activities");
 
   activity
     .command("search")
@@ -384,6 +386,8 @@ export function registerActivities(program: Command): void {
         output(cmd, globals(cmd).table ? result.data : result);
       },
     );
+
+  registerActivityUpdate(activity);
 
   const deleteCmd = activity
     .command("delete")

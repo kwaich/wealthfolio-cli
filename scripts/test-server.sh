@@ -27,6 +27,7 @@ case "${1:-}" in
       -e "WF_AUTH_PASSWORD_HASH=$HASH" \
       -e "WF_AUTH_TOKEN_TTL_MINUTES=${WF_TEST_TTL_MINUTES:-60}" \
       -e "WF_CORS_ALLOW_ORIGINS=http://localhost:$PORT" \
+      -e WF_MCP_ENABLED=true \
       "$IMAGE" >/dev/null
     for _ in $(seq 60); do
       if curl -sf "http://127.0.0.1:$PORT/api/v1/auth/status" >/dev/null; then

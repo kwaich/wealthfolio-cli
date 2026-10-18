@@ -3,6 +3,7 @@ import { Argument, Command } from "commander";
 import { Client } from "./client";
 import { globals, open, output, VERSION } from "./context";
 import { registerActivities } from "./commands/activities";
+import { registerAgentToken } from "./commands/agent-token";
 import { registerCurated } from "./commands/curated";
 import { registerReads } from "./commands/reads";
 import { COMMANDS, UPSTREAM_TAG } from "./contract";
@@ -301,6 +302,7 @@ export function buildProgram(): Command {
 
   registerReads(program);
   registerActivities(program);
+  registerAgentToken(program);
   registerCurated(program);
   return program;
 }

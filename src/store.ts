@@ -27,6 +27,7 @@ export function configDir(env: NodeJS.ProcessEnv = process.env): string {
 
 const configPath = () => join(configDir(), "config.json");
 const sessionPath = () => join(configDir(), "session.json");
+const agentTokenPath = () => join(configDir(), "agent-token.json");
 
 function readJson<T>(path: string): T | undefined {
   if (!existsSync(path)) return undefined;
@@ -62,6 +63,33 @@ export function saveSession(session: Session): void {
 
 export function clearSession(): void {
   rmSync(sessionPath(), { force: true });
+}
+
+/**
+ * A personal access token for the server's /mcp endpoint, from
+ * `wf agent-token create`. Kept apart from the session, so login and logout
+ * do not lose it while it stays valid on the server.
+ */
+export interface AgentToken {
+  url: string;
+  profileId?: string;
+  id: string;
+  name: string;
+  token: string;
+  scopes: string[];
+  expiresAt?: string | null;
+}
+
+export function loadAgentToken(): AgentToken | undefined {
+  return readJson<AgentToken>(agentTokenPath());
+}
+
+export function saveAgentToken(token: AgentToken): void {
+  writeJson(agentTokenPath(), token, 0o600);
+}
+
+export function clearAgentToken(): void {
+  rmSync(agentTokenPath(), { force: true });
 }
 
 export function normalizeUrl(raw: string): string {

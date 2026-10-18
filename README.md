@@ -66,14 +66,15 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 
 ### Environment and config
 
-| Variable              | Use                                                                 |
-| --------------------- | ------------------------------------------------------------------- |
-| `WF_URL`              | Server URL. Overrides the config file; `--url` overrides both.      |
-| `WF_PASSWORD`         | Password for `wf login`.                                            |
-| `WF_PROFILE_PASSWORD` | Profile password for `wf profile use`.                              |
-| `WF_TOKEN`            | Session token to use instead of the cache. Never written to disk.   |
-| `WF_CONFIG_DIR`       | Config directory (default `$XDG_CONFIG_HOME/wf` or `~/.config/wf`). |
-| `WF_DEBUG`            | Show upstream's request logs and stack traces.                      |
+| Variable              | Use                                                                   |
+| --------------------- | --------------------------------------------------------------------- |
+| `WF_URL`              | Server URL. Overrides the config file; `--url` overrides both.        |
+| `WF_PASSWORD`         | Password for `wf login`.                                              |
+| `WF_PROFILE_PASSWORD` | Profile password for `wf profile use`.                                |
+| `WF_TOKEN`            | Session token to use instead of the cache. Never written to disk.     |
+| `WF_AGENT_TOKEN`      | MCP access token for `wf activity update`, instead of the stored one. |
+| `WF_CONFIG_DIR`       | Config directory (default `$XDG_CONFIG_HOME/wf` or `~/.config/wf`).   |
+| `WF_DEBUG`            | Show upstream's request logs and stack traces.                        |
 
 `wf config show`, `wf config set url|profile <value>`, `wf config unset <key>`.
 
@@ -89,6 +90,8 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 | `wf accounts [--all]`                                                    | Accounts, with tracking mode, group and sync provider.                                                                                                                                                                         |
 | `wf holdings [--account id [--include-closed]]`                          | Holdings, cash included, with asset id, local values and FX rate.                                                                                                                                                              |
 | `wf activity search [filters]`                                           | Activities, newest first, with tax, subtype, status, review flag and source. Filters: `--account`, `--type`, `--id` (each repeatable), `--from`, `--to`, `--needs-review` or `--reviewed`, `--asset`, `--page`, `--page-size`. |
+| `wf activity update <id> [--field value]... [--dry-run]`                 | Corrects activity fields with the server's own rules; `--updates` for a batch. Needs `wf agent-token create`.                                                                                                                  |
+| `wf agent-token create\|show\|delete`                                    | The access token for the server's MCP endpoint, which `activity update` uses.                                                                                                                                                  |
 | `wf activity delete <id>... [--dry-run]`                                 | Deletes up to 100 activities. One leg of a linked transfer deletes both.                                                                                                                                                       |
 | `wf activity void <id>... [--dry-run]`                                   | Voids posted activities: kept, but out of holdings, cash and performance.                                                                                                                                                      |
 | `wf activity restore <id>... [--dry-run]`                                | Posts voided activities again.                                                                                                                                                                                                 |
@@ -114,6 +117,40 @@ seconds, error?, marketSync?}`. `wf call --wait` wraps the response as
 `{result, wait}`. An error or a timeout exits 1; the write has happened
 either way. Another client's update that starts during the wait can end it
 early.
+
+### Update
+
+`wf activity update` runs the server's own MCP tools: `prepare_activity_updates`
+with `--dry-run`, else `commit_activity_updates`. So the server applies its
+rules, not a copy in `wf`:
+
+- Name only the fields to change. Omitted fields keep their value;
+  `--clear <field>` sets an optional one to null. Flags: `--date`, `--account`,
+  `--type`, `--subtype`, `--asset` (an asset id; symbols are refused),
+  `--quantity`, `--unit-price`, `--amount`, `--currency`, `--fee`, `--tax`,
+  `--fx-rate`, `--notes`, `--approve`.
+- The preview lists every field that would change, with its current and
+  proposed value. This includes values the server derives, such as a trade
+  total recalculated from quantity and price. For one leg of a linked
+  transfer, `linkedChanges` shows what the other leg gets.
+- The server refuses a row when the activity does not exist, a value is
+  invalid, nothing would change, or the change would break a linked transfer
+  (its account, currency, type or asset). The other rows still run. The exit
+  code is 1 when any row was refused or failed.
+- A batch of up to 100 rows: `--updates '[{"activityId":"...","fee":"1.5"}]'`
+  or `--updates-file f.json` (`-` for stdin). The rows are the MCP tool's
+  rows.
+
+The MCP endpoint takes an access token, not the login session, and the server
+must run with `WF_MCP_ENABLED=true` (AI Agent Access in the app's settings).
+`wf agent-token create` makes a token for the current profile, with only the
+scopes `activities:read`, `activities:draft` and `activities:write`. The token
+expires in 90 days (`--expires-days`; 0 for never). `wf` stores it in
+`agent-token.json` (mode 0600), apart from the session, so login and logout
+keep it. `wf agent-token delete` revokes it on the server.
+
+To void or restore, use `wf activity void|restore`. Those work on servers
+without MCP.
 
 ### Delete, void and restore
 
@@ -173,6 +210,10 @@ ids=$(wf activity search --needs-review | jq -r '.data[] | select(.status == "PO
 wf activity void $ids --dry-run | jq '.rows[] | {activityId, status, newStatus, error}'
 wf activity void $ids
 
+# Correct a trade's price: preview (with the derived total), then apply
+wf activity update "$id" --unit-price 110 --dry-run | jq '.rows[0].changes'
+wf activity update "$id" --unit-price 110 --wait
+
 # Check before acting
 wf status >/dev/null 2>&1 || wf login
 ```
@@ -210,6 +251,11 @@ for `tsc`, aliases in `shims.config.ts` for the bundler and tests):
   `x-wf-profile-scope` header and the owner cookie, and stores a refreshed
   `Set-Cookie` token.
 - `notifyUnauthorized` throws an auth error (exit code 3).
+
+`wf activity update` is the one command that does not go through `invoke`.
+`src/mcp.ts` is a small Streamable HTTP client for the server's `/mcp`
+endpoint. It sends the agent token and the `x-wf-profile-id` header, and
+reads the JSON-RPC reply from the SSE response.
 
 `vendor/upstream/<tag>/SOURCE.json` holds the upstream commit and file hashes;
 a test fails if a vendored file is edited. `payloads.json` is extracted from the

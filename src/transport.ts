@@ -4,6 +4,8 @@ export const SESSION_COOKIE = "wf_session";
 /** Owner cookie the server sets when it runs without authentication. */
 export const BROWSER_COOKIE = "wf_browser";
 export const PROFILE_SCOPE_HEADER = "x-wf-profile-scope";
+/** Profile UUID header; /mcp picks the profile with it. */
+export const PROFILE_ID_HEADER = "x-wf-profile-id";
 
 /** Mutable connection state shared by the CLI and the shimmed profileFetch. */
 export interface TransportState {

@@ -25,6 +25,10 @@ code you can act on.
    `wf activity search`. Never guess an id.
 5. **Add `--wait` to writes when you read right after.** Without it, the
    server recalculates in the background and your next read can be stale.
+6. **Read as JSON, without `--table`.** `--table` truncates nested fields such
+   as `instrument`, so you lose the symbol. Fetch JSON, then summarise or
+   format it yourself, even when the user asks to see the data. Use `--table`
+   only when the user asks for a table.
 
 ## Exit codes
 
@@ -72,7 +76,7 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
 - Amounts are decimal strings, such as `"1001.5"`. Keep them as strings. Don't
   round them.
 - Dates are `YYYY-MM-DD` or RFC 3339.
-- Add `--table` only to show something to a person. Parse JSON yourself.
+- Add `--table` only when the user asks for a table (rule 6).
 - `wf spending report` defaults to this month. It returns `current` and
   `prior` totals (`income`, `outflow`, `saved`, `net`) and breakdowns by
   category and day. `--account <id>` repeats.

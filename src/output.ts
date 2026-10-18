@@ -6,10 +6,10 @@ type Write = (text: string) => void;
 
 const stdout: Write = (text) => process.stdout.write(text);
 
-/** JSON by default (for agents and jq); `--table` for people. */
+/** Compact JSON by default (for agents and jq; indentation costs about a quarter more tokens); `--table` for people. */
 export function print(value: unknown, { table = false }: OutputOptions = {}, write = stdout): void {
   if (!table) {
-    write(JSON.stringify(value ?? null, null, 2) + "\n");
+    write(JSON.stringify(value ?? null) + "\n");
     return;
   }
   if (value === undefined || value === null) return;

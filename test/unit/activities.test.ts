@@ -368,18 +368,61 @@ describe("reads and health", () => {
     expect(seen[1]!.path).toBe("/api/v1/holdings?accountId=a1&includeClosed=true");
   });
 
-  it("holdings drops classifications, notes and metadata unless --full", async () => {
+  it("holdings prints one flat row in the base currency unless --full", async () => {
     const holding = {
       id: "h1",
-      price: 10,
+      accountId: "a1",
+      holdingType: "security",
+      isClosed: false,
+      instrument: { id: "s1", symbol: "SAP", name: null, isin: "DE0007164600", notes: "n" },
+      quantity: 5,
+      price: 200,
+      localCurrency: "EUR",
+      baseCurrency: "USD",
+      fxRate: 1.1,
+      marketValue: { local: 1000, base: 1100 },
+      costBasis: { local: 900, base: 990 },
+      unrealizedGain: { local: 100, base: 110 },
+      totalGain: { local: 100, base: 110 },
+      totalGainPct: 0.11,
+      income: { local: 0, base: 0 },
+      dayChange: null,
+      dayChangePct: null,
+      lots: [{ id: "l1", quantity: 5 }],
+      weight: 0.5,
+      sourceAccountIds: [],
       metadata: { profile: {} },
-      instrument: { symbol: "BLOK", notes: "n", classifications: { sectors: [] } },
     };
     mockFetch(() => json([holding]));
     expect((await run("holdings")).json()).toEqual([
-      { id: "h1", price: 10, instrument: { symbol: "BLOK" } },
+      {
+        id: "h1",
+        accountId: "a1",
+        holdingType: "security",
+        assetId: "s1",
+        symbol: "SAP",
+        quantity: 5,
+        price: 200,
+        currency: "EUR",
+        baseCurrency: "USD",
+        fxRate: 1.1,
+        marketValueLocal: 1000,
+        marketValue: 1100,
+        costBasis: 990,
+        unrealizedGain: 110,
+        totalGain: 110,
+        totalGainPct: 0.11,
+        weight: 0.5,
+      },
     ]);
     expect((await run("holdings", "--full")).json()).toEqual([holding]);
+  });
+
+  it("--fields picks dotted fields from each row", async () => {
+    mockFetch(() => json([{ id: "h1", instrument: { symbol: "SAP", name: "SAP SE" }, weight: 1 }]));
+    expect(
+      (await run("holdings", "--full", "--fields", "instrument.symbol,weight")).json(),
+    ).toEqual([{ instrument: { symbol: "SAP" }, weight: 1 }]);
   });
 
   it("health reads the cached status", async () => {
@@ -388,12 +431,27 @@ describe("reads and health", () => {
     expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/health/status"]);
   });
 
-  it("health drops each issue's diagnostics unless --full", async () => {
-    const issue = { id: "i1", title: "Cash went below zero", diagnostics: [{ code: "X" }] };
+  it("health drops diagnostics and the web app's routes and payloads unless --full", async () => {
+    const issue = {
+      id: "i1",
+      title: "No market data for 1 holding",
+      params: { count: 1 },
+      fixAction: { id: "sync_prices", label: "Sync Prices", payload: ["s1"] },
+      navigateAction: { route: "/settings/market-data", label: "Review" },
+      affectedItems: [{ id: "s1", name: "SAP", symbol: "SAP", route: "/holdings/s1" }],
+      diagnostics: [{ code: "X" }],
+    };
     mockFetch(() => json({ overallSeverity: "WARNING", issues: [issue] }));
     expect((await run("health")).json()).toEqual({
       overallSeverity: "WARNING",
-      issues: [{ id: "i1", title: "Cash went below zero" }],
+      issues: [
+        {
+          id: "i1",
+          title: "No market data for 1 holding",
+          fixAction: { id: "sync_prices", label: "Sync Prices" },
+          affectedItems: [{ id: "s1", name: "SAP", symbol: "SAP" }],
+        },
+      ],
     });
     expect((await run("health", "--full")).json()).toEqual({
       overallSeverity: "WARNING",

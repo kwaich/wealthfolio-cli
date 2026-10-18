@@ -94,6 +94,21 @@ describe("wf rebalance", () => {
     });
   });
 
+  it("drops category colours unless --full", async () => {
+    const drift = {
+      rows: [{ categoryId: "c1", color: "#fff", driftBps: 10 }],
+      holdings: { rows: [{ symbol: "SAP", categoryColor: "#fff" }] },
+    };
+    server({ "POST /api/v1/allocation-targets/t1/drift": drift });
+    expect((await run("rebalance", "--holdings")).json()).toMatchObject({
+      drift: {
+        rows: [{ categoryId: "c1", driftBps: 10 }],
+        holdings: { rows: [{ symbol: "SAP" }] },
+      },
+    });
+    expect(((await run("rebalance", "--full")).json() as { drift: unknown }).drift).toEqual(drift);
+  });
+
   it("exits 2 when several targets are active and none is picked", async () => {
     server({
       "GET /api/v1/allocation-targets": [
@@ -162,6 +177,21 @@ describe("wf spending report", () => {
     }
   });
 
+  it("drops the per-day totals unless --full", async () => {
+    const report = {
+      current: { outflow: 10 },
+      spendingBreakdown: [{ categoryId: "cat_food", amount: 10 }],
+      byDay: [{ date: "2026-01-01" }],
+      byDayByCategory: [{ date: "2026-01-01", categoryId: "cat_food" }],
+    };
+    server({ "POST /api/v1/spending/report": report });
+    expect((await run("spending", "report")).json()).toEqual({
+      current: { outflow: 10 },
+      spendingBreakdown: [{ categoryId: "cat_food", amount: 10 }],
+    });
+    expect((await run("spending", "report", "--full")).json()).toEqual(report);
+  });
+
   it.each([
     [["--from", "2026-13-40"]],
     [["--from", "2026-02-30"]],
@@ -183,6 +213,81 @@ describe("wf budget", () => {
     const seen = server();
     await run("budget");
     expect(seen[0]!.path).toBe("/api/v1/spending/budget");
+  });
+
+  it("prints computed rows without ids, colours or empty categories unless --full", async () => {
+    const category = (name: string, target: number, actual: number) => ({
+      taxonomyId: "spending_categories",
+      categoryId: `cat_${name}`,
+      groupId: "g1",
+      parentId: null,
+      name,
+      color: "#fff",
+      icon: "Home",
+      target,
+      actual,
+      rolloverIn: 0,
+      rolloverOut: 0,
+      remaining: target - actual,
+      overspent: actual > target,
+      hasDefaultTarget: false,
+      hasMonthOverride: false,
+      rolloverEnabled: false,
+    });
+    const budget = {
+      state: { groups: [{ id: "g1", name: "Needs" }], groupAssignments: [], targets: [] },
+      computed: {
+        currency: "USD",
+        periodKey: "2026-09",
+        fxAsOf: "2026-09-30",
+        groupRows: [
+          {
+            group: { id: "g1", name: "Needs", color: "#fff", createdAt: "x" },
+            categoryTargetTotal: 500,
+            buffer: 0,
+            plannedTotal: 500,
+            actual: 600,
+            rolloverIn: 0,
+            rolloverOut: 0,
+            remaining: -100,
+            overspent: true,
+            rolloverEnabled: false,
+            categories: [category("housing", 500, 600), category("bills", 0, 0)],
+          },
+        ],
+        ungroupedRows: [],
+        incomeRows: [category("salary", 0, 0)],
+        totals: { spendingPlanned: 500, spendingActual: 600 },
+      },
+    };
+    server({ "GET /api/v1/spending/budget": budget });
+    expect((await run("budget")).json()).toEqual({
+      periodKey: "2026-09",
+      currency: "USD",
+      totals: { spendingPlanned: 500, spendingActual: 600 },
+      groups: [
+        {
+          name: "Needs",
+          planned: 500,
+          actual: 600,
+          remaining: -100,
+          overspent: true,
+          categories: [
+            {
+              categoryId: "cat_housing",
+              name: "housing",
+              target: 500,
+              actual: 600,
+              remaining: -100,
+              overspent: true,
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+      income: [],
+    });
+    expect((await run("budget", "--full")).json()).toEqual(budget);
   });
 
   it("rejects a bad month", async () => {

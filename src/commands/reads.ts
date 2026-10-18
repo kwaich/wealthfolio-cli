@@ -1,32 +1,101 @@
 // Read commands for the data the MCP read tools return. The REST responses
 // already carry every field those tools add (tracking mode, provider, asset
-// id, local values, FX rate, ...), so these pass them through unchanged,
-// except that holdings drop their classification tree and health its
-// per-entity diagnostics unless asked (--full).
+// id, local values, FX rate, ...). Holdings and health print a brief shape
+// unless asked (--full): agents pay for every byte.
 import type { Command } from "commander";
 import { open, output } from "../context";
+import { omit } from "../output";
+
+type Money = { local: number; base: number } | null | undefined;
 
 interface Holding {
-  metadata?: unknown;
-  instrument?: { classifications?: unknown; notes?: unknown };
+  id: string;
+  accountId: string;
+  holdingType: string;
+  isClosed?: boolean;
+  instrument?: { id: string; symbol: string; name?: string | null } | null;
+  quantity: number;
+  price?: number | null;
+  localCurrency: string;
+  baseCurrency: string;
+  fxRate?: number | null;
+  marketValue?: Money;
+  costBasis?: Money;
+  unrealizedGain?: Money;
+  totalGain?: Money;
+  totalGainPct?: number | null;
+  income?: Money;
+  dayChangePct?: number | null;
+  weight?: number;
+  sourceAccountIds?: string[];
 }
 
-// The classification tree (sectors, regions, colours) is most of a holding's size.
-function slim(holding: Holding): Holding {
-  const copy = { ...holding, ...(holding.instrument && { instrument: { ...holding.instrument } }) };
-  delete copy.metadata;
-  delete copy.instrument?.classifications;
-  delete copy.instrument?.notes;
-  return copy;
+/** Drops null and undefined values. */
+function compact(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null && v !== undefined));
+}
+
+/**
+ * One flat row per holding, money in the base currency. A full holding is
+ * about 1 KB: ten local/base money pairs, lots, classifications and provider
+ * fields. Price stays in the holding's own currency, as the server sends it.
+ */
+export function briefHolding(h: Holding): Record<string, unknown> {
+  const foreign = h.localCurrency !== h.baseCurrency;
+  return compact({
+    id: h.id,
+    accountId: h.accountId,
+    holdingType: h.holdingType,
+    isClosed: h.isClosed || undefined,
+    assetId: h.instrument?.id,
+    symbol: h.instrument?.symbol,
+    name: h.instrument?.name,
+    quantity: h.quantity,
+    price: h.price,
+    currency: h.localCurrency,
+    baseCurrency: h.baseCurrency,
+    fxRate: foreign ? h.fxRate : undefined,
+    marketValueLocal: foreign ? h.marketValue?.local : undefined,
+    marketValue: h.marketValue?.base,
+    costBasis: h.costBasis?.base,
+    unrealizedGain: h.unrealizedGain?.base,
+    totalGain: h.totalGain?.base,
+    totalGainPct: h.totalGainPct,
+    income: h.income?.base || undefined,
+    dayChangePct: h.dayChangePct,
+    weight: h.weight,
+    sourceAccountIds: h.sourceAccountIds?.length ? h.sourceAccountIds : undefined,
+  });
 }
 
 interface Health {
-  issues?: { diagnostics?: unknown }[];
+  issues?: {
+    diagnostics?: unknown;
+    fixAction?: { id: string; label: string; payload?: unknown };
+    navigateAction?: unknown;
+    params?: unknown;
+    affectedItems?: { id: string; name: string; symbol?: string; route?: string }[];
+  }[];
 }
 
 // diagnostics repeats each issue's details and affected items, entity by entity.
+// The other fields left out are for the web app: routes, translation keys and
+// params, cache keys, and the fix button's payload of asset ids, which
+// affectedItems also lists.
 function slimHealth(health: Health): Health {
-  return { ...health, issues: health.issues?.map((i) => ({ ...i, diagnostics: undefined })) };
+  return {
+    ...health,
+    issues: health.issues?.map((issue) => {
+      const { fixAction, affectedItems } = issue;
+      return {
+        ...omit(issue, "diagnostics", "navigateAction", "params", "code", "dataHash", "timestamp"),
+        ...(fixAction && { fixAction: { id: fixAction.id, label: fixAction.label } }),
+        ...(affectedItems && {
+          affectedItems: affectedItems.map((item) => omit(item, "route")),
+        }),
+      };
+    }),
+  };
 }
 
 export function registerReads(program: Command): void {
@@ -48,7 +117,7 @@ export function registerReads(program: Command): void {
     .option("--include-closed", "include closed positions (with --account)")
     .option(
       "--full",
-      "also return each instrument's classifications and notes and the holding's metadata, which are left out by default",
+      "return every field the server sends (local values, lots, classifications, ...), not one flat row per holding",
     )
     .action(
       async (opts: { account?: string; includeClosed?: boolean; full?: boolean }, cmd: Command) => {
@@ -59,7 +128,7 @@ export function registerReads(program: Command): void {
           filter,
           ...(opts.includeClosed ? { includeClosed: true } : {}),
         });
-        output(cmd, opts.full ? holdings : holdings.map(slim));
+        output(cmd, opts.full ? holdings : holdings.map(briefHolding));
       },
     );
 
@@ -67,7 +136,10 @@ export function registerReads(program: Command): void {
     .command("health")
     .description("Health Center status (get_health_status); --refresh runs the checks first")
     .option("--refresh", "run the full checks first (run_health_checks)")
-    .option("--full", "also return each issue's diagnostics, which are left out by default")
+    .option(
+      "--full",
+      "return every field of each issue (diagnostics, actions, routes), not only the main ones",
+    )
     .action(async (opts: { refresh?: boolean; full?: boolean }, cmd: Command) => {
       const client = open(cmd);
       const show = (health: Health) => output(cmd, opts.full ? health : slimHealth(health));

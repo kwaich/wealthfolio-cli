@@ -57,6 +57,15 @@ export function buildProgram(): Command {
     .version(VERSION)
     .option("--url <url>", "server URL (overrides WF_URL and the config file)")
     .option("--table", "print a table instead of JSON")
+    .option(
+      "--fields <list>",
+      "print only these comma-separated fields of each row (dotted paths, such as instrument.symbol)",
+      (list: string) =>
+        list
+          .split(",")
+          .map((f) => f.trim())
+          .filter(Boolean),
+    )
     // Must come before subcommands are added: they copy it at creation.
     // main() maps commander errors to exit code 2.
     .exitOverride()

@@ -25,8 +25,8 @@ code you can act on.
    `wf activity search`. Never guess an id.
 5. **Add `--wait` to writes when you read right after.** Without it, the
    server recalculates in the background and your next read can be stale.
-6. **Read as JSON, without `--table`.** `--table` truncates nested fields such
-   as `instrument`, so you lose the symbol. Fetch JSON, then summarise or
+6. **Read as JSON, without `--table`.** `--table` cuts long values and nested
+   fields, so you can lose data. Fetch JSON, then summarise or
    format it yourself, even when the user asks to see the data. Use `--table`
    only when the user asks for a table.
 
@@ -77,18 +77,15 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
   round them.
 - Dates are `YYYY-MM-DD` or RFC 3339.
 - Add `--table` only when the user asks for a table (rule 6).
-- `wf holdings` leaves out each instrument's classifications and notes and the
-  holding's metadata. Add `--full` only when you need sectors or regions. Even
-  slim, no `--account` returns the aggregate across all accounts (on one
-  portfolio, 26 rows were about 12k tokens), so pass `--account` when the question is about one
-  account. Pipe it through `jq` to the fields you need:
-
-  ```sh
-  wf holdings --account <id> | jq '[.[] | {symbol: .instrument.symbol,
-    quantity, price, value: .marketValue.base, cost: .costBasis.base,
-    gain: .totalGain.base, weight}]'
-  ```
-
+- `wf holdings` returns one flat row per holding: `assetId`, `symbol`,
+  `quantity`, `price` (in `currency`), and `marketValue`, `costBasis`,
+  `unrealizedGain`, `totalGain`, `totalGainPct`, `dayChangePct` and `weight`
+  in `baseCurrency`. Null fields are left out. Add `--full` only when you need
+  local values, lots, sectors or regions. Without `--account`, it returns the
+  total across all accounts, with `sourceAccountIds`. Pass `--account` when the
+  question is about one account.
+- Add `--fields a,b` to any command to keep only those fields of each row,
+  for example `wf holdings --fields symbol,marketValue,weight`.
 - `activity search` returns 20 rows by default, each with only `id`, `accountId`,
   `assetId`, `assetSymbol`, `activityType`, `subtype`, `status`, `date`,
   `quantity`, `unitPrice`, `amount`, `fee`, `currency`, `fxRate` and
@@ -100,12 +97,15 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
   it was recorded at.
 - `wf spending report` defaults to this month. It returns `current` and
   `prior` totals (`income`, `outflow`, `saved`, `net`) and breakdowns by
-  category and day. `--account <id>` repeats.
-- `wf budget` returns `state` (groups, targets) and `computed` (`totals`,
-  per-group rows). All zeros with empty `groupRows` means no budget is set up
-  for that month; say so instead of reporting zero spending.
+  category. Add `--full` for the per-day totals. `--account <id>` repeats.
+- `wf budget` returns `totals`, `groups` (each with `planned`, `actual`,
+  `remaining`, `overspent` and its `categories`), `ungrouped` and `income`.
+  Categories with no target and no spending are left out. Zero totals with no
+  categories mean no budget is set up for that month; say so instead of
+  reporting zero spending. `--full` returns the server's `{state, computed}`.
 - `wf health` leaves out each issue's `diagnostics` (it repeats `details` and
-  `affectedItems`). Add `--full` only if those don't explain an issue.
+  `affectedItems`) and the web app's routes. Add `--full` only if those don't
+  explain an issue.
 - `wf holdings --account <id> --include-closed` also lists sold-out positions.
 
 For anything without its own command:
@@ -131,7 +131,7 @@ wf call create_activity --wait --args '{"activity":{
 
 - A new asset needs `symbol` and `quoteCcy`. For an asset already stored,
   pass `"asset":{"id":"<assetId>"}`. `wf holdings` shows that id as
-  `instrument.id`.
+  `assetId`.
 
 Cash activities (`DEPOSIT`, `WITHDRAWAL`, `DIVIDEND`, `INTEREST`, `FEE`) take
 `amount` and no quantity. The output is `{result, wait}`. When
@@ -161,7 +161,7 @@ wf activity update <id> --unit-price 110 --wait
 - Name only the fields that change. `--clear fee` sets an optional field to
   null.
 - `--asset` takes an asset id, not a symbol. Find the id in `wf holdings`
-  (`instrument.id`) or in the activity's `assetId`.
+  or in the activity, as `assetId`.
 - `--approve` takes an activity out of the review queue. A draft becomes
   posted.
 - For a batch, use `--updates '[{"activityId":"a","fee":"1"},...]'` or

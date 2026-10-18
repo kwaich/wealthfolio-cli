@@ -48,14 +48,6 @@ describe("wf sync", () => {
   });
 });
 
-describe("wf activity delete", () => {
-  it("sends DELETE /activities/<id>", async () => {
-    const seen = server();
-    expect((await run("activity", "delete", "act-1")).code).toBe(0);
-    expect(seen[0]).toMatchObject({ method: "DELETE", path: "/api/v1/activities/act-1" });
-  });
-});
-
 describe("wf rebalance", () => {
   it("uses the only active target and its account scope for drift", async () => {
     const seen = server();

@@ -79,19 +79,46 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 
 ## Commands
 
-| Command                                                                  | What it does                                                                |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `wf login` / `wf logout` / `wf status`                                   | Session; `status` also warns when the server version is not `UPSTREAM_TAG`. |
-| `wf commands [--filter x]`                                               | Every command: method, path, and the payload type `invoke` reads.           |
-| `wf call <command> [--args json \| --args-file f \| --args -]`           | Runs a command. `-` reads stdin.                                            |
-| `wf sync [--asset id]... [--refetch-all \| --recent-days n]`             | Syncs market data and updates the portfolio.                                |
-| `wf activity delete <id>`                                                | Deletes one activity.                                                       |
-| `wf rebalance [--target id\|name] [--cash n [--mode m] [--asset id]...]` | Drift against an allocation target; with `--cash`, a rebalance plan.        |
-| `wf spending report [--from d] [--to d] [--account id]...`               | Spending report (default: this month so far).                               |
-| `wf budget [--period YYYY-MM]`                                           | Budget snapshot.                                                            |
-| `wf alt-asset value <id> <amount> [--date d] [--notes t]`                | Records a valuation for a property, vehicle, and so on.                     |
+| Command                                                                  | What it does                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wf login` / `wf logout` / `wf status`                                   | Session; `status` also warns when the server version is not `UPSTREAM_TAG`.                                                                                                                                                    |
+| `wf commands [--filter x]`                                               | Every command: method, path, and the payload type `invoke` reads.                                                                                                                                                              |
+| `wf call <command> [--args json \| --args-file f \| --args -]`           | Runs a command. `-` reads stdin.                                                                                                                                                                                               |
+| `wf sync [--asset id]... [--refetch-all \| --recent-days n]`             | Syncs market data and updates the portfolio.                                                                                                                                                                                   |
+| `wf accounts [--all]`                                                    | Accounts, with tracking mode, group and sync provider.                                                                                                                                                                         |
+| `wf holdings [--account id [--include-closed]]`                          | Holdings, cash included, with asset id, local values and FX rate.                                                                                                                                                              |
+| `wf activity search [filters]`                                           | Activities, newest first, with tax, subtype, status, review flag and source. Filters: `--account`, `--type`, `--id` (each repeatable), `--from`, `--to`, `--needs-review` or `--reviewed`, `--asset`, `--page`, `--page-size`. |
+| `wf activity delete <id>... [--dry-run]`                                 | Deletes up to 100 activities. One leg of a linked transfer deletes both.                                                                                                                                                       |
+| `wf activity void <id>... [--dry-run]`                                   | Voids posted activities: kept, but out of holdings, cash and performance.                                                                                                                                                      |
+| `wf activity restore <id>... [--dry-run]`                                | Posts voided activities again.                                                                                                                                                                                                 |
+| `wf health [--refresh]`                                                  | Health Center status; `--refresh` runs the checks first.                                                                                                                                                                       |
+| `wf rebalance [--target id\|name] [--cash n [--mode m] [--asset id]...]` | Drift against an allocation target; with `--cash`, a rebalance plan.                                                                                                                                                           |
+| `wf spending report [--from d] [--to d] [--account id]...`               | Spending report (default: this month so far).                                                                                                                                                                                  |
+| `wf budget [--period YYYY-MM]`                                           | Budget snapshot.                                                                                                                                                                                                               |
+| `wf alt-asset value <id> <amount> [--date d] [--notes t]`                | Records a valuation for a property, vehicle, and so on.                                                                                                                                                                        |
 
 Add `--table` before or after the command for a human-readable table.
+
+### Delete, void and restore
+
+These follow the same rules as the MCP tools `prepare_activity_deletions`,
+`commit_activity_deletions` and the `void` field of the activity update tools.
+Run them with `--dry-run` first: the preview reads each activity and the other
+leg of a linked transfer, and writes nothing.
+
+- Each id is its own row. A row is refused when the activity does not exist,
+  or when an earlier row already covers it (a repeat, or the other leg of a
+  pair). The other rows still run. Output is `{dryRun, rows, summary}`; the
+  exit code is 1 when any row was refused or failed.
+- `void` takes only a posted activity. A draft or pending one counts toward
+  nothing yet, so delete it instead. Voiding also clears the review flag.
+- One leg of a linked transfer is voided or restored only when both legs have
+  the same status, because the server copies the status to the other leg.
+- `delete` warns when an activity came from a broker sync, which may add it
+  back. Void it instead to keep it out for good: broker syncs keep it void.
+
+`wf health --refresh` runs the checks in the timezone set in the app, as the
+MCP tool does, and falls back to the machine's timezone when none is set.
 
 `wf sync` returns as soon as the server queues the job. The server syncs
 quotes and then recalculates the portfolio in the background.
@@ -122,6 +149,11 @@ wf call create_activity --args-file - <<'JSON'
 {"activity": {"accountId": "<id>", "activityType": "DEPOSIT",
               "activityDate": "2026-10-01", "amount": "500", "currency": "USD"}}
 JSON
+
+# Find activities waiting for review, preview voiding them, then void
+ids=$(wf activity search --needs-review | jq -r '.data[] | select(.status == "POSTED") | .id')
+wf activity void $ids --dry-run | jq '.rows[] | {activityId, status, newStatus, error}'
+wf activity void $ids
 
 # Check before acting
 wf status >/dev/null 2>&1 || wf login

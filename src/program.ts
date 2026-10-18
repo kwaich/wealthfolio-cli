@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { Argument, Command } from "commander";
 import { Client } from "./client";
 import { globals, open, output, VERSION } from "./context";
+import { registerActivities } from "./commands/activities";
 import { registerCurated } from "./commands/curated";
+import { registerReads } from "./commands/reads";
 import { COMMANDS, UPSTREAM_TAG } from "./contract";
 import { UsageError } from "./errors";
 import { getSecret, readStdin } from "./prompt";
@@ -271,6 +273,8 @@ export function buildProgram(): Command {
       output(cmd, { locked: true });
     });
 
+  registerReads(program);
+  registerActivities(program);
   registerCurated(program);
   return program;
 }

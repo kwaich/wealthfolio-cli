@@ -133,12 +133,60 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
     expect(holdings.map((h) => h.holdingType)).toContain("cash");
   });
 
-  it("deletes the activity with the curated command", async () => {
-    const deleted = await wfJson<{ id: string }>("activity", "delete", activityId);
-    expect(deleted.id).toBe(activityId);
+  it("voids and restores the activity; holdings follow", async () => {
+    const cash = async () =>
+      (await wfJson<{ holdingType: string }[]>("holdings", "--account", accountId)).length;
+    const preview = await wfJson<{ rows: { status: string; newStatus: string }[] }>(
+      "activity",
+      "void",
+      activityId,
+      "--dry-run",
+    );
+    expect(preview.rows[0]).toMatchObject({ status: "ready", newStatus: "VOID" });
+    const voided = await wfJson<{ rows: { activity: { status: string; notes: string | null } }[] }>(
+      "activity",
+      "void",
+      activityId,
+    );
+    expect(voided.rows[0]!.activity.status).toBe("VOID");
+    expect(await eventually(cash, (n) => n === 0)).toBe(0);
+    const again = await wf(["activity", "void", activityId]);
+    expect(again.code).toBe(1);
+    expect(again.stdout).toContain("already void");
+    await wfJson("activity", "restore", activityId);
+    expect(await eventually(cash, (n) => n > 0)).toBeGreaterThan(0);
+    const found = await wfJson<{ data: { id: string; status: string; tax: unknown }[] }>(
+      "activity",
+      "search",
+      "--id",
+      activityId,
+    );
+    expect(found.data[0]).toMatchObject({ id: activityId, status: "POSTED" });
+  });
+
+  it("deletes the activity after a preview", async () => {
+    const preview = await wfJson<{ summary: { ready: number } }>(
+      "activity",
+      "delete",
+      activityId,
+      "--dry-run",
+    );
+    expect(preview.summary.ready).toBe(1);
+    const deleted = await wfJson<{ rows: { status: string; activity: { id: string } }[] }>(
+      "activity",
+      "delete",
+      activityId,
+    );
+    expect(deleted.rows[0]).toMatchObject({ status: "deleted", activity: { id: activityId } });
     const again = await wf(["activity", "delete", activityId]);
     expect(again.code).toBe(1);
-    expect(again.stderr).toMatch(/not found/i);
+    expect(again.stdout).toContain("not found");
+  });
+
+  it("runs the health checks", async () => {
+    const health = await wfJson<{ checkedAt: string; issues: unknown[] }>("health", "--refresh");
+    expect(health.checkedAt).toBeTruthy();
+    expect(Array.isArray(health.issues)).toBe(true);
   });
 
   it("runs the other curated read commands", async () => {

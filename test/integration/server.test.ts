@@ -45,15 +45,6 @@ async function wfJson<T = unknown>(...args: string[]): Promise<T> {
 const call = <T = unknown>(command: string, args?: unknown) =>
   wfJson<T>("call", command, ...(args === undefined ? [] : ["--args", JSON.stringify(args)]));
 
-async function eventually<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000): Promise<T> {
-  const end = Date.now() + ms;
-  for (;;) {
-    const value = await fn();
-    if (ok(value) || Date.now() > end) return value;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-}
-
 const session = () =>
   JSON.parse(readFileSync(join(configDir, "session.json"), "utf8")) as { token: string };
 
@@ -110,27 +101,42 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
     expect(accounts.map((a) => a.id)).toContain(accountId);
   });
 
-  it("records an activity and reads holdings", async () => {
-    const activity = await call<{ id: string; activityType: string }>("create_activity", {
-      activity: {
-        accountId,
-        activityType: "DEPOSIT",
-        activityDate: "2026-01-05",
-        amount: "1000",
-        currency: "USD",
-      },
-    });
-    expect(activity.activityType).toBe("DEPOSIT");
-    activityId = activity.id;
-    // Valuation runs in the background after the write.
-    const holdings = await eventually(
-      () =>
-        call<{ holdingType: string }[]>("get_holdings", {
-          filter: { type: "account", accountId },
-        }),
-      (h) => h.length > 0,
+  it("records an activity, waits for the recalculation, and reads holdings", async () => {
+    const created = await wfJson<{
+      result: { id: string; activityType: string };
+      wait: { status: string };
+    }>(
+      "call",
+      "create_activity",
+      "--wait",
+      "--wait-timeout",
+      "60",
+      "--args",
+      JSON.stringify({
+        activity: {
+          accountId,
+          activityType: "DEPOSIT",
+          activityDate: "2026-01-05",
+          amount: "1000",
+          currency: "USD",
+        },
+      }),
     );
+    expect(created.result.activityType).toBe("DEPOSIT");
+    expect(created.wait.status).toBe("complete");
+    activityId = created.result.id;
+    // No polling: --wait returned after the recalculation.
+    const holdings = await wfJson<{ holdingType: string }[]>("holdings", "--account", accountId);
     expect(holdings.map((h) => h.holdingType)).toContain("cash");
+  });
+
+  it("schema describes create_activity, and a bad payload names the missing field", async () => {
+    const info = await wfJson<{ payloadType: string }>("schema", "create_activity");
+    expect(info.payloadType).toContain("accountId: string");
+    const bad = await wf(["call", "create_account", "--args", '{"account":{"name":"x"}}']);
+    expect(bad.code).toBe(1);
+    expect(bad.stderr).toMatch(/missing field `\w+`/);
+    expect(bad.stderr).toContain("wf schema create_account");
   });
 
   it("voids and restores the activity; holdings follow", async () => {
@@ -143,19 +149,19 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
       "--dry-run",
     );
     expect(preview.rows[0]).toMatchObject({ status: "ready", newStatus: "VOID" });
-    const voided = await wfJson<{ rows: { activity: { status: string; notes: string | null } }[] }>(
-      "activity",
-      "void",
-      activityId,
-    );
+    const voided = await wfJson<{
+      rows: { activity: { status: string } }[];
+      wait: { status: string };
+    }>("activity", "void", activityId, "--wait", "--wait-timeout", "60");
     expect(voided.rows[0]!.activity.status).toBe("VOID");
-    expect(await eventually(cash, (n) => n === 0)).toBe(0);
+    expect(voided.wait.status).toBe("complete");
+    expect(await cash()).toBe(0);
     const again = await wf(["activity", "void", activityId]);
     expect(again.code).toBe(1);
     expect(again.stdout).toContain("already void");
-    await wfJson("activity", "restore", activityId);
-    expect(await eventually(cash, (n) => n > 0)).toBeGreaterThan(0);
-    const found = await wfJson<{ data: { id: string; status: string; tax: unknown }[] }>(
+    await wfJson("activity", "restore", activityId, "--wait", "--wait-timeout", "60");
+    expect(await cash()).toBeGreaterThan(0);
+    const found = await wfJson<{ data: { id: string; status: string }[] }>(
       "activity",
       "search",
       "--id",
@@ -190,7 +196,10 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
   });
 
   it("runs the other curated read commands", async () => {
-    expect(await wfJson("sync")).toEqual({ queued: true });
+    expect(await wfJson("sync", "--wait", "--wait-timeout", "60")).toMatchObject({
+      queued: true,
+      wait: { status: "complete" },
+    });
     expect(await wfJson("budget")).toHaveProperty("state");
     expect(
       await wfJson("spending", "report", "--from", "2026-01-01", "--to", "2026-01-31"),

@@ -9,7 +9,8 @@ import { COMMANDS, UPSTREAM_TAG } from "./contract";
 import { UsageError } from "./errors";
 import { getSecret, readStdin } from "./prompt";
 import { loadConfig, normalizeUrl, saveConfig, type Config } from "./store";
-import { payloadHint } from "./payloads";
+import { commandInfo, payloadHint } from "./payloads";
+import { addWaitOptions, withWait, type WaitOptions } from "./wait";
 
 /** Parses --args / --args-file / --args - into a payload object. */
 export async function readArgs(opts: {
@@ -205,16 +206,41 @@ export function buildProgram(): Command {
     });
 
   program
+    .command("schema")
+    .description("Payload and response types of one command, from the web app's typed callers")
+    .argument("<command>", "command name, for example create_activity")
+    .action((name: string, _opts, cmd: Command) => {
+      const info = commandInfo(name);
+      if (!info) {
+        throw new UsageError(`Unknown command: ${name}`, "Run `wf commands` to list commands.");
+      }
+      output(cmd, info);
+    });
+
+  const callCmd = program
     .command("call")
     .description("Run any command from `wf commands` with a JSON payload")
     .argument("<command>", "command name, for example get_accounts")
     .option("--args <json>", "payload as a JSON object; - reads stdin")
-    .option("--args-file <file>", "payload from a JSON file; - reads stdin")
-    .action(async (command: string, opts: { args?: string; argsFile?: string }, cmd: Command) => {
+    .option("--args-file <file>", "payload from a JSON file; - reads stdin");
+  addWaitOptions(callCmd).action(
+    async (
+      command: string,
+      opts: { args?: string; argsFile?: string } & WaitOptions,
+      cmd: Command,
+    ) => {
       const payload = await readArgs(opts);
+      if (opts.wait && COMMANDS[command]?.method === "GET") {
+        throw new UsageError(
+          `${command} only reads, so no portfolio update follows it. Drop --wait.`,
+        );
+      }
       const client = open(cmd);
-      output(cmd, await client.invoke(command, payload));
-    });
+      const { result, wait } = await withWait(opts, () => client.invoke(command, payload));
+      // With --wait the output wraps the response, so the job's outcome fits beside it.
+      output(cmd, wait ? { result: result ?? null, wait } : result);
+    },
+  );
 
   const profile = program.command("profile").description("List, unlock and lock profiles");
   profile

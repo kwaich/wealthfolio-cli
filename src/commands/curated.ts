@@ -3,6 +3,7 @@
 import { Command, Option } from "commander";
 import { UsageError } from "../errors";
 import { open, output } from "../context";
+import { addWaitOptions, withWait, type WaitOptions } from "../wait";
 import { collect, dateArg, decimalArg, intArg, monthArg, numberArg, today } from "./args";
 
 type AccountScope =
@@ -36,26 +37,29 @@ export function registerCurated(program: Command): void {
   // The server's sync_market_data handler queues the same portfolio job that
   // update_portfolio queues, with the requested sync mode. Calling both would
   // run the job twice. Both return before the job finishes.
-  program
+  const syncCmd = program
     .command("sync")
     .description("Sync market data and update the portfolio in the background (sync_market_data)")
     .option("--asset <id>", "sync only this asset; repeat for more", collect)
     .option("--refetch-all", "refetch the quote history (up to 5 years)")
-    .option("--recent-days <n>", "refetch quotes for the last n days", intArg)
-    .action(
-      async (
-        opts: { asset?: string[]; refetchAll?: boolean; recentDays?: number },
-        cmd: Command,
-      ) => {
-        await open(cmd).invoke("sync_market_data", {
+    .option("--recent-days <n>", "refetch quotes for the last n days", intArg);
+  addWaitOptions(syncCmd).action(
+    async (
+      opts: { asset?: string[]; refetchAll?: boolean; recentDays?: number } & WaitOptions,
+      cmd: Command,
+    ) => {
+      const client = open(cmd);
+      const { wait } = await withWait(opts, () =>
+        client.invoke("sync_market_data", {
           // Omitted means every asset; an empty list would mean none.
           ...(opts.asset ? { assetIds: opts.asset } : {}),
           refetchAll: opts.refetchAll ?? false,
           ...(opts.recentDays === undefined ? {} : { refetchRecentDays: opts.recentDays }),
-        });
-        output(cmd, { queued: true });
-      },
-    );
+        }),
+      );
+      output(cmd, { queued: true, ...(wait ? { wait } : {}) });
+    },
+  );
 
   program
     .command("rebalance")
@@ -158,26 +162,35 @@ export function registerCurated(program: Command): void {
   const altAsset = program
     .command("alt-asset")
     .description("Alternative assets (property, vehicles, ...)");
-  altAsset
+  const valueCmd = altAsset
     .command("value")
     .description("Record a new valuation (update_alternative_asset_valuation)")
     .argument("<id>", "alternative asset id")
     .argument("<amount>", "new value as a decimal number", decimalArg)
     .option("--date <date>", "valuation date, YYYY-MM-DD (default: today)", dateArg)
-    .option("--notes <text>", "notes for this valuation")
-    .action(
-      async (id: string, amount: string, opts: { date?: string; notes?: string }, cmd: Command) => {
-        const request = {
-          value: amount,
-          date: opts.date ?? today(),
-          ...(opts.notes === undefined ? {} : { notes: opts.notes }),
-        };
-        output(
-          cmd,
-          await open(cmd).invoke("update_alternative_asset_valuation", { assetId: id, request }),
-        );
-      },
-    );
+    .option("--notes <text>", "notes for this valuation");
+  addWaitOptions(valueCmd).action(
+    async (
+      id: string,
+      amount: string,
+      opts: { date?: string; notes?: string } & WaitOptions,
+      cmd: Command,
+    ) => {
+      const request = {
+        value: amount,
+        date: opts.date ?? today(),
+        ...(opts.notes === undefined ? {} : { notes: opts.notes }),
+      };
+      const client = open(cmd);
+      const { result, wait } = await withWait(opts, () =>
+        client.invoke<Record<string, unknown>>("update_alternative_asset_valuation", {
+          assetId: id,
+          request,
+        }),
+      );
+      output(cmd, wait ? { ...result, wait } : result);
+    },
+  );
 }
 
 function listTargets(targets: AllocationTarget[]): string {

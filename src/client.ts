@@ -274,12 +274,23 @@ function errorMessage(text: string): string {
 }
 
 export function toWfError(error: unknown, command: string): WfError {
+  if (
+    error instanceof ServerError &&
+    !error.hint &&
+    (error.status === 400 || error.status === 422)
+  ) {
+    return new ServerError(
+      error.message,
+      error.status,
+      `Check the payload with \`wf schema ${command}\`.`,
+    );
+  }
   if (error instanceof WfError) return error;
   // The vendored switch reads payload keys directly, so a missing key is a TypeError.
   if (error instanceof TypeError) {
     return new UsageError(
       `Bad arguments for ${command}: ${error.message}`,
-      `Check the payload keys for ${command}. See \`wf commands --filter ${command}\` and the README.`,
+      `Check the payload with \`wf schema ${command}\`.`,
     );
   }
   if (error instanceof Error) {

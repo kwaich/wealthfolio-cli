@@ -60,7 +60,7 @@ export function assertNoUndefinedInUrl(path: string): void {
   if ([...segments, ...values].some((part) => part === "undefined" || part === "null")) {
     throw new UsageError(
       `Refusing to send ${path}: a required payload key is missing.`,
-      "Check the payload keys with `wf commands --filter <command>`.",
+      "Check the payload with `wf schema <command>`.",
     );
   }
 }

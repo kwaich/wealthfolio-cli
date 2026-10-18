@@ -83,7 +83,8 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `wf login` / `wf logout` / `wf status`                                   | Session; `status` also warns when the server version is not `UPSTREAM_TAG`.                                                                                                                                                    |
 | `wf commands [--filter x]`                                               | Every command: method, path, and the payload type `invoke` reads.                                                                                                                                                              |
-| `wf call <command> [--args json \| --args-file f \| --args -]`           | Runs a command. `-` reads stdin.                                                                                                                                                                                               |
+| `wf schema <command>`                                                    | Payload and response types of one command, expanded, with field notes.                                                                                                                                                         |
+| `wf call <command> [--args json \| --args-file f \| --args -] [--wait]`  | Runs a command. `-` reads stdin.                                                                                                                                                                                               |
 | `wf sync [--asset id]... [--refetch-all \| --recent-days n]`             | Syncs market data and updates the portfolio.                                                                                                                                                                                   |
 | `wf accounts [--all]`                                                    | Accounts, with tracking mode, group and sync provider.                                                                                                                                                                         |
 | `wf holdings [--account id [--include-closed]]`                          | Holdings, cash included, with asset id, local values and FX rate.                                                                                                                                                              |
@@ -98,6 +99,21 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 | `wf alt-asset value <id> <amount> [--date d] [--notes t]`                | Records a valuation for a property, vehicle, and so on.                                                                                                                                                                        |
 
 Add `--table` before or after the command for a human-readable table.
+
+### Waiting for the recalculation
+
+A write returns before the server recalculates the portfolio in the
+background. With `--wait`, `wf` follows the server's event stream (as the web
+app does) and returns when that update has finished, so the next read sees
+the new numbers. `--wait` works on `wf call` (not on read-only GET commands),
+`wf sync`, `wf alt-asset value`, and `wf activity delete|void|restore`.
+`--wait-timeout <seconds>` defaults to 300.
+
+The output gets a `wait` object: `{status: "complete" | "error" | "timeout",
+seconds, error?, marketSync?}`. `wf call --wait` wraps the response as
+`{result, wait}`. An error or a timeout exits 1; the write has happened
+either way. Another client's update that starts during the wait can end it
+early.
 
 ### Delete, void and restore
 
@@ -136,7 +152,8 @@ quotes and then recalculates the portfolio in the background.
 
 ```sh
 # What can I call, and with which payload?
-wf commands --filter holding | jq -r '.[] | "\(.name)\t\(.payload)"'
+wf commands --filter holding | jq -r '.[] | .name'
+wf schema create_activity | jq -r .payloadType
 
 # Accounts, then holdings of the first one
 wf call get_accounts | jq -r '.[] | "\(.id)\t\(.name)\t\(.currency)"'
@@ -144,11 +161,12 @@ id=$(wf call get_accounts | jq -r '.[0].id')
 wf call get_holdings --args "{\"filter\":{\"type\":\"account\",\"accountId\":\"$id\"}}" \
   | jq '[.[] | {symbol: .instrument.symbol, value: .marketValue.base}]'
 
-# Record a deposit
-wf call create_activity --args-file - <<'JSON'
+# Record a deposit, wait for the recalculation, then read holdings
+wf call create_activity --wait --args-file - <<'JSON' | jq '.wait.status'
 {"activity": {"accountId": "<id>", "activityType": "DEPOSIT",
               "activityDate": "2026-10-01", "amount": "500", "currency": "USD"}}
 JSON
+wf holdings --account <id>
 
 # Find activities waiting for review, preview voiding them, then void
 ids=$(wf activity search --needs-review | jq -r '.data[] | select(.status == "POSTED") | .id')
@@ -160,9 +178,20 @@ wf status >/dev/null 2>&1 || wf login
 ```
 
 The payload is the object the web app passes to `invoke`, not the HTTP body.
-For example, `update_account` takes `{"accountUpdate": {...}}`. `wf commands`
-shows the shape for each command. `wf` refuses to send a request when a
-required id is missing (it would otherwise call, for example,
+For example, `update_account` takes `{"accountUpdate": {...}}`.
+`wf schema <command>` shows:
+
+- `payload`: the keys the vendored `invoke` reads;
+- `payloadType` and `resultType`: the types the web app's own code passes
+  and expects, expanded, with the upstream doc comments;
+- `source`: that call in the upstream frontend.
+
+`payloadType` is what the web app sends, not the server's own contract. The
+server can require a field the app always sends: `create_account` needs
+`isDefault` and `isActive`, which the type marks optional. When the server
+rejects a payload, `wf` prints its message, which names the missing or wrong
+field (``missing field `isDefault` ``). `wf` also refuses to send a request
+when a required id is missing (it would otherwise call, for example,
 `DELETE /accounts/undefined`).
 
 Do not open the server's SQLite database directly. Writes through the API
@@ -184,7 +213,10 @@ for `tsc`, aliases in `shims.config.ts` for the bundler and tests):
 
 `vendor/upstream/<tag>/SOURCE.json` holds the upstream commit and file hashes;
 a test fails if a vendored file is edited. `payloads.json` is extracted from the
-switch by `scripts/extract-payloads.mjs`.
+switch by `scripts/extract-payloads.mjs`. `schemas.json` comes from
+`scripts/extract-schemas.mjs`, which runs the TypeScript checker over the
+upstream frontend source (with zod at upstream's version) and expands the
+types at each typed `invoke` call. `vendor.sh` needs `node` and `npm` for it.
 
 ## Development
 

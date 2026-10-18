@@ -6,6 +6,8 @@ import { Command, Option } from "commander";
 import type { Client } from "../client";
 import { globals, open, output } from "../context";
 import { UsageError, WfError } from "../errors";
+import type { WaitResult } from "../events";
+import { addWaitOptions, withWait, type WaitOptions } from "../wait";
 import { collect, dateArg, intArg } from "./args";
 
 /** Max ids per call, as the MCP tools. */
@@ -228,8 +230,14 @@ function summarize(rows: Row[], extra: Record<string, number> = {}) {
 }
 
 /** Exit 1 when any row was not done, after printing every row. */
-function finish(cmd: Command, dryRun: boolean, rows: Row[], extra?: Record<string, number>) {
-  output(cmd, { dryRun, rows, summary: summarize(rows, extra) });
+function finish(
+  cmd: Command,
+  dryRun: boolean,
+  rows: Row[],
+  extra?: Record<string, number>,
+  wait?: WaitResult,
+) {
+  output(cmd, { dryRun, rows, summary: summarize(rows, extra), ...(wait ? { wait } : {}) });
   const bad = rows.some((r) => r.status === "invalid" || r.status === "failed");
   if (bad) process.exitCode = 1;
 }
@@ -377,44 +385,52 @@ export function registerActivities(program: Command): void {
       },
     );
 
-  activity
+  const deleteCmd = activity
     .command("delete")
     .description(
       "Delete activities; one leg of a linked transfer deletes both (delete_activity). " +
         "Use --dry-run to preview.",
     )
     .argument("<ids...>", `activity ids, up to ${MAX_BATCH}`)
-    .option("--dry-run", "show what would be deleted; change nothing")
-    .action(async (rawIds: string[], opts: { dryRun?: boolean }, cmd: Command) => {
+    .option("--dry-run", "show what would be deleted; change nothing");
+  addWaitOptions(deleteCmd).action(
+    async (rawIds: string[], opts: { dryRun?: boolean } & WaitOptions, cmd: Command) => {
       const ids = parseIds(rawIds);
       const client = open(cmd);
       const planned = await planRows(client, ids, () => ({}));
-      const rows: Row[] = [];
       for (const { row, ready } of planned) {
-        if (ready) {
-          const warning = brokerWarning(ready.activity, ready.linked);
-          if (warning) row.warning = warning;
-        }
-        if (!ready || opts.dryRun) {
-          rows.push(row);
-          continue;
-        }
-        try {
-          await client.invoke("delete_activity", { activityId: row.activityId });
-          rows.push({ ...row, status: "deleted" });
-        } catch (error) {
-          if (error instanceof WfError && error.exitCode !== 1) throw error;
-          rows.push({ ...row, status: "failed", error: errorText(error) });
-        }
+        if (!ready) continue;
+        const warning = brokerWarning(ready.activity, ready.linked);
+        if (warning) row.warning = warning;
       }
+      const commit = async () => {
+        const rows: Row[] = [];
+        for (const { row, ready } of planned) {
+          if (!ready || opts.dryRun) {
+            rows.push(row);
+            continue;
+          }
+          try {
+            await client.invoke("delete_activity", { activityId: row.activityId });
+            rows.push({ ...row, status: "deleted" });
+          } catch (error) {
+            if (error instanceof WfError && error.exitCode !== 1) throw error;
+            rows.push({ ...row, status: "failed", error: errorText(error) });
+          }
+        }
+        return rows;
+      };
+      const writes = !opts.dryRun && planned.some((p) => p.ready);
+      const { result: rows, wait } = await withWait({ ...opts, wait: opts.wait && writes }, commit);
       const removed = rows
         .filter((r) => r.status === (opts.dryRun ? "ready" : "deleted"))
         .reduce((n, r) => n + (r.linkedActivity ? 2 : 1), 0);
-      finish(cmd, !!opts.dryRun, rows, { activitiesDeleted: removed });
-    });
+      finish(cmd, !!opts.dryRun, rows, { activitiesDeleted: removed }, wait);
+    },
+  );
 
   for (const change of ["void", "restore"] as const) {
-    activity
+    const statusCmd = activity
       .command(change)
       .description(
         change === "void"
@@ -423,36 +439,46 @@ export function registerActivities(program: Command): void {
           : "Post voided activities again (update_activity). Use --dry-run to preview.",
       )
       .argument("<ids...>", `activity ids, up to ${MAX_BATCH}`)
-      .option("--dry-run", "show what would change; change nothing")
-      .action(async (rawIds: string[], opts: { dryRun?: boolean }, cmd: Command) => {
+      .option("--dry-run", "show what would change; change nothing");
+    addWaitOptions(statusCmd).action(
+      async (rawIds: string[], opts: { dryRun?: boolean } & WaitOptions, cmd: Command) => {
         const ids = parseIds(rawIds);
         const client = open(cmd);
         const planned = await planRows(client, ids, (a, linked) => {
           const status = planStatus(change, a, linked);
           return status === "VOID" || status === "POSTED" ? { status: status as Status } : status;
         });
-        const rows: Row[] = [];
-        for (const { row, ready } of planned) {
-          if (!ready) {
-            rows.push(row);
-            continue;
+        const commit = async () => {
+          const rows: Row[] = [];
+          for (const { row, ready } of planned) {
+            if (!ready) {
+              rows.push(row);
+              continue;
+            }
+            row.newStatus = ready.status;
+            if (opts.dryRun) {
+              rows.push(row);
+              continue;
+            }
+            try {
+              const updated = await client.invoke<RawActivity>("update_activity", {
+                activity: statusUpdate(ready.activity, ready.status),
+              });
+              rows.push({ ...row, status: "updated", activity: stored(updated) });
+            } catch (error) {
+              if (error instanceof WfError && error.exitCode !== 1) throw error;
+              rows.push({ ...row, status: "failed", error: errorText(error) });
+            }
           }
-          row.newStatus = ready.status;
-          if (opts.dryRun) {
-            rows.push(row);
-            continue;
-          }
-          try {
-            const updated = await client.invoke<RawActivity>("update_activity", {
-              activity: statusUpdate(ready.activity, ready.status),
-            });
-            rows.push({ ...row, status: "updated", activity: stored(updated) });
-          } catch (error) {
-            if (error instanceof WfError && error.exitCode !== 1) throw error;
-            rows.push({ ...row, status: "failed", error: errorText(error) });
-          }
-        }
-        finish(cmd, !!opts.dryRun, rows);
-      });
+          return rows;
+        };
+        const writes = !opts.dryRun && planned.some((p) => p.ready);
+        const { result: rows, wait } = await withWait(
+          { ...opts, wait: opts.wait && writes },
+          commit,
+        );
+        finish(cmd, !!opts.dryRun, rows, undefined, wait);
+      },
+    );
   }
 }

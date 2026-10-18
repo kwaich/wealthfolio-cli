@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { COMMANDS, PAYLOADS, UPSTREAM_TAG } from "../../src/contract";
+import { COMMANDS, PAYLOADS, SCHEMAS, UPSTREAM_TAG } from "../../src/contract";
 import { json, mockFetch, run, useTempConfig } from "../helpers";
 
 useTempConfig();
@@ -169,6 +169,12 @@ describe("wf commands", () => {
 
   it("has a payload hint for every switch case, and no hint for unknown names", () => {
     for (const name of Object.keys(PAYLOADS)) expect(COMMANDS).toHaveProperty(name);
+  });
+
+  it("has caller types only for known commands, for nearly all of them", () => {
+    const names = Object.keys(SCHEMAS);
+    for (const name of names) expect(COMMANDS).toHaveProperty(name);
+    expect(names.length / Object.keys(COMMANDS).length).toBeGreaterThan(0.9);
   });
 });
 

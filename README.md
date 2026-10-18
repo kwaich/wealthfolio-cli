@@ -325,6 +325,28 @@ WF_TEST_REFRESH=1 pnpm test:integration
 scripts/test-server.sh down
 ```
 
+### Output size benchmark
+
+Agents pay for every byte that `wf` prints. `scripts/bench.sh` prints a
+Markdown table of how much each read command outputs (tokens are estimated as
+bytes / 4) against a server that `scripts/bench-seed.sh` fills with a fixed
+data set: 3 accounts, 8 stocks, about 120 activities, and a month of
+categorised spending with budget targets.
+
+```sh
+pnpm build
+eval "$(scripts/test-server.sh up)"
+scripts/bench-seed.sh                  # once per server
+scripts/bench.sh                       # this build
+scripts/bench.sh v0.3.1                # this build against a tag or commit
+scripts/test-server.sh down
+```
+
+Without prices, holdings carry nulls and look smaller than a real portfolio's.
+The server fetches them from Yahoo Finance. If outbound traffic must go through
+a proxy, start the server with `WF_TEST_PROXY=1` (it passes `HTTPS_PROXY`), and
+with `WF_TEST_CA_BUNDLE=<file>` when that proxy has its own CA.
+
 ### Upgrading upstream
 
 ```sh

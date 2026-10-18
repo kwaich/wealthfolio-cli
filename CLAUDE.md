@@ -25,6 +25,14 @@ WF_TEST_REFRESH=1 pnpm test:integration
 scripts/test-server.sh down
 ```
 
+Output size benchmark (see README "Output size benchmark"). Run it before and after a change to what a command prints:
+
+```sh
+pnpm build && eval "$(scripts/test-server.sh up)"
+scripts/bench-seed.sh           # once per server; WF_TEST_PROXY=1 on test-server.sh if quotes need a proxy
+scripts/bench.sh main           # Markdown table: main vs dist/wf.js
+```
+
 CI also fails if `vendor/`, `src/contract.ts` or `UPSTREAM_TAG` differ from what is committed (`git diff --exit-code`).
 
 ## Architecture

@@ -6,6 +6,9 @@
 #
 # The image tag comes from UPSTREAM_TAG without the leading "v".
 # WF_TEST_PORT (default 8088) and WF_TEST_TTL_MINUTES (default 60) are optional.
+# WF_TEST_PROXY=1 passes HTTPS_PROXY and WF_TEST_CA_BUNDLE (a CA file) to the
+# server, for sandboxes where outbound traffic must go through a proxy, so
+# quote syncs can reach the market data provider.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,8 +23,18 @@ HASH='$argon2id$v=19$m=65536,t=3,p=4$MmjLEewIk4DVBqvLmF5+Dg$0yHuiPF4d7YOOS9+tnOV
 case "${1:-}" in
   up)
     docker rm -f "$NAME" >/dev/null 2>&1 || true
-    docker run -d --name "$NAME" -p "127.0.0.1:$PORT:8088" \
-      -e WF_LISTEN_ADDR=0.0.0.0:8088 \
+    NET=(-p "127.0.0.1:$PORT:8088" -e WF_LISTEN_ADDR=0.0.0.0:8088)
+    if [ "${WF_TEST_PROXY:-}" = 1 ]; then
+      # A proxy on the host's loopback is reachable only from the host network.
+      NET=(--network host -e "WF_LISTEN_ADDR=127.0.0.1:$PORT"
+        -e "HTTPS_PROXY=${HTTPS_PROXY:?WF_TEST_PROXY=1 needs HTTPS_PROXY}"
+        -e "HTTP_PROXY=${HTTP_PROXY:-$HTTPS_PROXY}" -e NO_PROXY=127.0.0.1,localhost)
+      if [ -n "${WF_TEST_CA_BUNDLE:-}" ]; then
+        NET+=(-v "$WF_TEST_CA_BUNDLE:/etc/ssl/certs/ca-certificates.crt:ro"
+          -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt)
+      fi
+    fi
+    docker run -d --name "$NAME" "${NET[@]}" \
       -e WF_DB_PATH=/data/wealthfolio.db \
       -e "WF_SECRET_KEY=$(openssl rand -base64 32)" \
       -e "WF_AUTH_PASSWORD_HASH=$HASH" \

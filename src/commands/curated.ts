@@ -5,7 +5,16 @@ import { UsageError } from "../errors";
 import { open, output } from "../context";
 import { omit } from "../output";
 import { addWaitOptions, withWait, type WaitOptions } from "../wait";
-import { collect, dateArg, decimalArg, intArg, monthArg, numberArg, today } from "./args";
+import {
+  collect,
+  dateArg,
+  dayBoundary,
+  decimalArg,
+  intArg,
+  monthArg,
+  numberArg,
+  today,
+} from "./args";
 
 type AccountScope =
   | { type: "all" }
@@ -151,12 +160,16 @@ export function registerCurated(program: Command): void {
         // Without --from, report the month of --to; a past --to must not start after it.
         const startDate = opts.from ?? `${endDate.slice(0, 8)}01`;
         if (startDate > endDate) throw new UsageError("--from must not be after --to.");
+        const client = open(cmd);
+        // The server reads RFC 3339 instants, and refuses a bare date once an
+        // account is tracked. As the web app: whole days in the app's timezone.
+        const settings = await client.invoke<{ timezone?: string }>("get_settings");
         const request = {
-          startDate,
-          endDate,
+          startDate: dayBoundary(startDate, "start", settings?.timezone),
+          endDate: dayBoundary(endDate, "end", settings?.timezone),
           ...(opts.account ? { accountIds: opts.account } : {}),
         };
-        const report = await open(cmd).invoke<Record<string, unknown>>("get_spending_report", {
+        const report = await client.invoke<Record<string, unknown>>("get_spending_report", {
           request,
         });
         if (!opts.full) {

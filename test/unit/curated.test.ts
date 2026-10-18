@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { targetFilter } from "../../src/commands/curated";
-import { today } from "../../src/commands/args";
+import { dayBoundary, today } from "../../src/commands/args";
 import { json, mockFetch, run, useTempConfig, type Recorded } from "../helpers";
 
 useTempConfig();
@@ -136,8 +136,12 @@ describe("wf rebalance", () => {
 });
 
 describe("wf spending report", () => {
-  it("sends the request object with dates and accounts", async () => {
-    const seen = server();
+  // The app's timezone, not the machine's, sets where each day starts.
+  const SETTINGS = { "GET /api/v1/settings": { timezone: "Asia/Hong_Kong" } };
+  const report = (seen: Recorded[]) => seen.find((r) => r.path === "/api/v1/spending/report")!;
+
+  it("sends whole days in the app's timezone as RFC 3339, and the accounts", async () => {
+    const seen = server(SETTINGS);
     await run(
       "spending",
       "report",
@@ -148,19 +152,25 @@ describe("wf spending report", () => {
       "--account",
       "a1",
     );
-    expect(seen[0]).toMatchObject({
+    expect(report(seen)).toMatchObject({
       method: "POST",
-      path: "/api/v1/spending/report",
-      body: { startDate: "2026-01-01", endDate: "2026-03-31", accountIds: ["a1"] },
+      body: {
+        startDate: "2025-12-31T16:00:00.000Z",
+        endDate: "2026-03-31T15:59:59.999Z",
+        accountIds: ["a1"],
+      },
     });
   });
 
   it("defaults to this month so far", async () => {
     vi.useFakeTimers({ now: new Date(2026, 9, 18, 12) });
     try {
-      const seen = server();
+      const seen = server(SETTINGS);
       await run("spending", "report");
-      expect(seen[0]!.body).toEqual({ startDate: "2026-10-01", endDate: "2026-10-18" });
+      expect(report(seen).body).toEqual({
+        startDate: "2026-09-30T16:00:00.000Z",
+        endDate: "2026-10-18T15:59:59.999Z",
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -169,9 +179,12 @@ describe("wf spending report", () => {
   it("starts at the first day of the --to month without --from", async () => {
     vi.useFakeTimers({ now: new Date(2026, 9, 18, 12) });
     try {
-      const seen = server();
+      const seen = server(SETTINGS);
       expect((await run("spending", "report", "--to", "2026-01-31")).code).toBe(0);
-      expect(seen[0]!.body).toEqual({ startDate: "2026-01-01", endDate: "2026-01-31" });
+      expect(report(seen).body).toEqual({
+        startDate: "2025-12-31T16:00:00.000Z",
+        endDate: "2026-01-31T15:59:59.999Z",
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -199,6 +212,15 @@ describe("wf spending report", () => {
   ])("exits 2 for bad dates %j", async (args) => {
     server();
     expect((await run("spending", "report", ...args)).code).toBe(2);
+  });
+});
+
+describe("dayBoundary", () => {
+  it("handles UTC, offsets and a DST change", () => {
+    expect(dayBoundary("2025-11-01", "start", "UTC")).toBe("2025-11-01T00:00:00.000Z");
+    expect(dayBoundary("2025-11-01", "start", "America/New_York")).toBe("2025-11-01T04:00:00.000Z");
+    // London moves to BST at 01:00 UTC on 2025-03-30; the day ends at 22:59:59.999 UTC.
+    expect(dayBoundary("2025-03-30", "end", "Europe/London")).toBe("2025-03-30T22:59:59.999Z");
   });
 });
 

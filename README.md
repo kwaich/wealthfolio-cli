@@ -183,5 +183,6 @@ PR before merging.
 
 ## License
 
-GPL-3.0 (see [LICENSE](LICENSE)). The files under `vendor/upstream/` are
-copied from Wealthfolio and stay under its AGPL-3.0 license.
+AGPL-3.0-only (see [LICENSE](LICENSE)), the same license as Wealthfolio.
+The files under `vendor/upstream/` are copied from Wealthfolio and keep
+their upstream copyright.

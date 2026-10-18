@@ -85,18 +85,18 @@ describe("--wait", () => {
     });
   });
 
-  it("drops the list of skipped assets from marketSync", async () => {
+  it("drops the skipped assets and the provider URLs from marketSync", async () => {
     server([
       event("portfolio:update-start"),
       event(
         "market:sync-complete",
-        '{"failed_syncs":[["a","boom"]],"show_skipped_reasons":false,"skipped_reasons":[["b","Inactive asset"]]}',
+        '{"failed_syncs":[["a","boom: error sending request for url (https://x.test/a?b=c)"]],"show_skipped_reasons":false,"skipped_reasons":[["b","Inactive asset"]]}',
       ),
       event("portfolio:update-complete"),
     ]);
     const res = await run(...createArgs, "--wait");
     expect((res.json() as { wait: { marketSync: unknown } }).wait.marketSync).toEqual({
-      failed_syncs: [["a", "boom"]],
+      failed_syncs: [["a", "boom: error sending request"]],
     });
   });
 

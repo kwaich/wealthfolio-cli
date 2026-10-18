@@ -2,9 +2,20 @@
 // vendored invoke switch reads for its command (see `wf commands`).
 import { Command, Option } from "commander";
 import { UsageError } from "../errors";
-import { open, output } from "../context";
+import { appTimezone, open, output } from "../context";
+import { omit } from "../output";
 import { addWaitOptions, withWait, type WaitOptions } from "../wait";
-import { collect, dateArg, decimalArg, intArg, monthArg, numberArg, today } from "./args";
+import {
+  collect,
+  dateArg,
+  dayBoundary,
+  decimalArg,
+  intArg,
+  monthArg,
+  numberArg,
+  today,
+  todayIn,
+} from "./args";
 
 type AccountScope =
   | { type: "all" }
@@ -74,6 +85,7 @@ export function registerCurated(program: Command): void {
     )
     .option("--asset <id>", "limit the plan to this asset; repeat for more", collect)
     .option("--holdings", "include holdings in the drift report")
+    .option("--full", "keep the colours of each category, left out by default")
     .action(
       async (
         opts: {
@@ -82,6 +94,7 @@ export function registerCurated(program: Command): void {
           mode: string;
           asset?: string[];
           holdings?: boolean;
+          full?: boolean;
         },
         cmd: Command,
       ) => {
@@ -104,14 +117,14 @@ export function registerCurated(program: Command): void {
           );
         }
         const filter = targetFilter(target!);
-        const drift = await client.invoke("get_allocation_target_drift", {
+        const drift = await client.invoke<Drift>("get_allocation_target_drift", {
           targetId: target!.id,
           filter,
           includeHoldings: opts.holdings ?? false,
         });
         const result: Record<string, unknown> = {
           target: { id: target!.id, name: target!.name },
-          drift,
+          drift: opts.full ? drift : withoutColours(drift),
         };
         if (opts.cash !== undefined) {
           result.plan = await client.invoke("calculate_rebalance_plan", {
@@ -138,28 +151,52 @@ export function registerCurated(program: Command): void {
     )
     .option("--to <date>", "end date, YYYY-MM-DD (default: today)", dateArg)
     .option("--account <id>", "only this account; repeat for more", collect)
-    .action(async (opts: { from?: string; to?: string; account?: string[] }, cmd: Command) => {
-      const endDate = opts.to ?? today();
-      // Without --from, report the month of --to; a past --to must not start after it.
-      const startDate = opts.from ?? `${endDate.slice(0, 8)}01`;
-      if (startDate > endDate) throw new UsageError("--from must not be after --to.");
-      const request = {
-        startDate,
-        endDate,
-        ...(opts.account ? { accountIds: opts.account } : {}),
-      };
-      output(cmd, await open(cmd).invoke("get_spending_report", { request }));
-    });
+    .option("--full", "also return the per-day totals (byDay, byDayByCategory)")
+    .action(
+      async (
+        opts: { from?: string; to?: string; account?: string[]; full?: boolean },
+        cmd: Command,
+      ) => {
+        if (opts.from && opts.to && opts.from > opts.to) {
+          throw new UsageError("--from must not be after --to.");
+        }
+        const client = open(cmd);
+        // The server reads RFC 3339 instants, and refuses a bare date once an
+        // account is tracked. As the web app: whole days in the app's timezone,
+        // and "today" there too.
+        const timezone = await appTimezone(client);
+        const endDate = opts.to ?? todayIn(timezone);
+        // Without --from, report the month of --to; a past --to must not start after it.
+        const startDate = opts.from ?? `${endDate.slice(0, 8)}01`;
+        if (startDate > endDate) throw new UsageError("--from must not be after --to.");
+        const request = {
+          startDate: dayBoundary(startDate, "start", timezone),
+          endDate: dayBoundary(endDate, "end", timezone),
+          ...(opts.account ? { accountIds: opts.account } : {}),
+        };
+        const report = await client.invoke<Record<string, unknown>>("get_spending_report", {
+          request,
+        });
+        if (!opts.full) {
+          // One row per day and per day and category: most of a long range's size.
+          delete report.byDay;
+          delete report.byDayByCategory;
+        }
+        output(cmd, report);
+      },
+    );
 
   program
     .command("budget")
     .description("Budget snapshot for a month (get_budget)")
     .option("--period <month>", "month as YYYY-MM (default: the server's current month)", monthArg)
-    .action(async (opts: { period?: string }, cmd: Command) => {
-      output(
-        cmd,
-        await open(cmd).invoke("get_budget", opts.period ? { periodKey: opts.period } : {}),
+    .option("--full", "return the server's {state, computed}, with ids, colours and every category")
+    .action(async (opts: { period?: string; full?: boolean }, cmd: Command) => {
+      const budget = await open(cmd).invoke<Budget>(
+        "get_budget",
+        opts.period ? { periodKey: opts.period } : {},
       );
+      output(cmd, opts.full || !budget?.computed ? budget : briefBudget(budget));
     });
 
   const altAsset = program
@@ -194,6 +231,105 @@ export function registerCurated(program: Command): void {
       output(cmd, wait ? { ...result, wait } : result);
     },
   );
+}
+
+interface Drift {
+  rows?: { color?: unknown }[];
+  holdings?: { rows?: { categoryColor?: unknown }[] } | null;
+}
+
+function withoutColours(drift: Drift): Drift {
+  return {
+    ...drift,
+    rows: drift.rows?.map((row) => omit(row, "color")),
+    ...(drift.holdings && {
+      holdings: {
+        ...drift.holdings,
+        rows: drift.holdings.rows?.map((row) => omit(row, "categoryColor")),
+      },
+    }),
+  };
+}
+
+interface BudgetCategory {
+  categoryId: string;
+  name: string;
+  target: number;
+  actual: number;
+  rolloverIn: number;
+  rolloverOut: number;
+  remaining: number;
+  overspent: boolean;
+}
+
+interface Budget {
+  state: unknown;
+  computed: {
+    currency: string;
+    periodKey: string;
+    fxAsOf?: string | null;
+    totals: Record<string, number>;
+    groupRows: {
+      group: { name: string };
+      plannedTotal: number;
+      buffer: number;
+      actual: number;
+      rolloverIn: number;
+      rolloverOut: number;
+      remaining: number;
+      overspent: boolean;
+      categories: BudgetCategory[];
+    }[];
+    ungroupedRows: BudgetCategory[];
+    incomeRows: BudgetCategory[];
+  };
+}
+
+/** Rollovers only when there are any. */
+function rollover(row: { rolloverIn: number; rolloverOut: number }) {
+  return row.rolloverIn || row.rolloverOut
+    ? { rolloverIn: row.rolloverIn, rolloverOut: row.rolloverOut }
+    : {};
+}
+
+/** Categories with no target, no spending and no rollover carry nothing. */
+function briefCategories(rows: BudgetCategory[]) {
+  return rows
+    .filter((c) => c.target || c.actual || c.rolloverIn || c.rolloverOut)
+    .map((c) => ({
+      categoryId: c.categoryId,
+      name: c.name,
+      target: c.target,
+      actual: c.actual,
+      remaining: c.remaining,
+      overspent: c.overspent,
+      ...rollover(c),
+    }));
+}
+
+/**
+ * The computed side only, without ids, colours and icons. `state` repeats the
+ * groups and targets that `computed` already shows, and every default category
+ * is listed even when nothing is budgeted or spent in it.
+ */
+export function briefBudget({ computed }: Budget) {
+  return {
+    periodKey: computed.periodKey,
+    currency: computed.currency,
+    totals: computed.totals,
+    groups: computed.groupRows.map((g) => ({
+      name: g.group.name,
+      planned: g.plannedTotal,
+      ...(g.buffer ? { buffer: g.buffer } : {}),
+      actual: g.actual,
+      remaining: g.remaining,
+      overspent: g.overspent,
+      ...rollover(g),
+      categories: briefCategories(g.categories),
+    })),
+    ungrouped: briefCategories(computed.ungroupedRows),
+    income: briefCategories(computed.incomeRows),
+  };
 }
 
 function listTargets(targets: AllocationTarget[]): string {

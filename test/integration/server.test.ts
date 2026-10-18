@@ -242,7 +242,7 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
       queued: true,
       wait: { status: "complete" },
     });
-    expect(await wfJson("budget")).toHaveProperty("state");
+    expect(await wfJson("budget")).toHaveProperty("totals");
     expect(
       await wfJson("spending", "report", "--from", "2026-01-01", "--to", "2026-01-31"),
     ).toHaveProperty("current");

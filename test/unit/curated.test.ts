@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { targetFilter } from "../../src/commands/curated";
-import { today } from "../../src/commands/args";
+import { dayBoundary, today, todayIn } from "../../src/commands/args";
 import { json, mockFetch, run, useTempConfig, type Recorded } from "../helpers";
 
 useTempConfig();
@@ -94,6 +94,21 @@ describe("wf rebalance", () => {
     });
   });
 
+  it("drops category colours unless --full", async () => {
+    const drift = {
+      rows: [{ categoryId: "c1", color: "#fff", driftBps: 10 }],
+      holdings: { rows: [{ symbol: "SAP", categoryColor: "#fff" }] },
+    };
+    server({ "POST /api/v1/allocation-targets/t1/drift": drift });
+    expect((await run("rebalance", "--holdings")).json()).toMatchObject({
+      drift: {
+        rows: [{ categoryId: "c1", driftBps: 10 }],
+        holdings: { rows: [{ symbol: "SAP" }] },
+      },
+    });
+    expect(((await run("rebalance", "--full")).json() as { drift: unknown }).drift).toEqual(drift);
+  });
+
   it("exits 2 when several targets are active and none is picked", async () => {
     server({
       "GET /api/v1/allocation-targets": [
@@ -121,8 +136,12 @@ describe("wf rebalance", () => {
 });
 
 describe("wf spending report", () => {
-  it("sends the request object with dates and accounts", async () => {
-    const seen = server();
+  // The app's timezone, not the machine's, sets where each day starts.
+  const SETTINGS = { "GET /api/v1/settings": { timezone: "Asia/Hong_Kong" } };
+  const report = (seen: Recorded[]) => seen.find((r) => r.path === "/api/v1/spending/report")!;
+
+  it("sends whole days in the app's timezone as RFC 3339, and the accounts", async () => {
+    const seen = server(SETTINGS);
     await run(
       "spending",
       "report",
@@ -133,19 +152,25 @@ describe("wf spending report", () => {
       "--account",
       "a1",
     );
-    expect(seen[0]).toMatchObject({
+    expect(report(seen)).toMatchObject({
       method: "POST",
-      path: "/api/v1/spending/report",
-      body: { startDate: "2026-01-01", endDate: "2026-03-31", accountIds: ["a1"] },
+      body: {
+        startDate: "2025-12-31T16:00:00.000Z",
+        endDate: "2026-03-31T15:59:59.999Z",
+        accountIds: ["a1"],
+      },
     });
   });
 
   it("defaults to this month so far", async () => {
     vi.useFakeTimers({ now: new Date(2026, 9, 18, 12) });
     try {
-      const seen = server();
+      const seen = server(SETTINGS);
       await run("spending", "report");
-      expect(seen[0]!.body).toEqual({ startDate: "2026-10-01", endDate: "2026-10-18" });
+      expect(report(seen).body).toEqual({
+        startDate: "2026-09-30T16:00:00.000Z",
+        endDate: "2026-10-18T15:59:59.999Z",
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -154,12 +179,30 @@ describe("wf spending report", () => {
   it("starts at the first day of the --to month without --from", async () => {
     vi.useFakeTimers({ now: new Date(2026, 9, 18, 12) });
     try {
-      const seen = server();
+      const seen = server(SETTINGS);
       expect((await run("spending", "report", "--to", "2026-01-31")).code).toBe(0);
-      expect(seen[0]!.body).toEqual({ startDate: "2026-01-01", endDate: "2026-01-31" });
+      expect(report(seen).body).toEqual({
+        startDate: "2025-12-31T16:00:00.000Z",
+        endDate: "2026-01-31T15:59:59.999Z",
+      });
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("drops the per-day totals unless --full", async () => {
+    const report = {
+      current: { outflow: 10 },
+      spendingBreakdown: [{ categoryId: "cat_food", amount: 10 }],
+      byDay: [{ date: "2026-01-01" }],
+      byDayByCategory: [{ date: "2026-01-01", categoryId: "cat_food" }],
+    };
+    server({ "POST /api/v1/spending/report": report });
+    expect((await run("spending", "report")).json()).toEqual({
+      current: { outflow: 10 },
+      spendingBreakdown: [{ categoryId: "cat_food", amount: 10 }],
+    });
+    expect((await run("spending", "report", "--full")).json()).toEqual(report);
   });
 
   it.each([
@@ -169,6 +212,17 @@ describe("wf spending report", () => {
   ])("exits 2 for bad dates %j", async (args) => {
     server();
     expect((await run("spending", "report", ...args)).code).toBe(2);
+  });
+});
+
+describe("dayBoundary", () => {
+  it("handles UTC, offsets and a DST change", () => {
+    expect(dayBoundary("2025-11-01", "start", "UTC")).toBe("2025-11-01T00:00:00.000Z");
+    expect(todayIn("Asia/Tokyo", new Date("2026-10-31T16:00:00Z"))).toBe("2026-11-01");
+    expect(todayIn("America/Los_Angeles", new Date("2026-11-01T03:00:00Z"))).toBe("2026-10-31");
+    expect(dayBoundary("2025-11-01", "start", "America/New_York")).toBe("2025-11-01T04:00:00.000Z");
+    // London moves to BST at 01:00 UTC on 2025-03-30; the day ends at 22:59:59.999 UTC.
+    expect(dayBoundary("2025-03-30", "end", "Europe/London")).toBe("2025-03-30T22:59:59.999Z");
   });
 });
 
@@ -183,6 +237,81 @@ describe("wf budget", () => {
     const seen = server();
     await run("budget");
     expect(seen[0]!.path).toBe("/api/v1/spending/budget");
+  });
+
+  it("prints computed rows without ids, colours or empty categories unless --full", async () => {
+    const category = (name: string, target: number, actual: number) => ({
+      taxonomyId: "spending_categories",
+      categoryId: `cat_${name}`,
+      groupId: "g1",
+      parentId: null,
+      name,
+      color: "#fff",
+      icon: "Home",
+      target,
+      actual,
+      rolloverIn: 0,
+      rolloverOut: 0,
+      remaining: target - actual,
+      overspent: actual > target,
+      hasDefaultTarget: false,
+      hasMonthOverride: false,
+      rolloverEnabled: false,
+    });
+    const budget = {
+      state: { groups: [{ id: "g1", name: "Needs" }], groupAssignments: [], targets: [] },
+      computed: {
+        currency: "USD",
+        periodKey: "2026-09",
+        fxAsOf: "2026-09-30",
+        groupRows: [
+          {
+            group: { id: "g1", name: "Needs", color: "#fff", createdAt: "x" },
+            categoryTargetTotal: 500,
+            buffer: 0,
+            plannedTotal: 500,
+            actual: 600,
+            rolloverIn: 0,
+            rolloverOut: 0,
+            remaining: -100,
+            overspent: true,
+            rolloverEnabled: false,
+            categories: [category("housing", 500, 600), category("bills", 0, 0)],
+          },
+        ],
+        ungroupedRows: [],
+        incomeRows: [category("salary", 0, 0)],
+        totals: { spendingPlanned: 500, spendingActual: 600 },
+      },
+    };
+    server({ "GET /api/v1/spending/budget": budget });
+    expect((await run("budget")).json()).toEqual({
+      periodKey: "2026-09",
+      currency: "USD",
+      totals: { spendingPlanned: 500, spendingActual: 600 },
+      groups: [
+        {
+          name: "Needs",
+          planned: 500,
+          actual: 600,
+          remaining: -100,
+          overspent: true,
+          categories: [
+            {
+              categoryId: "cat_housing",
+              name: "housing",
+              target: 500,
+              actual: 600,
+              remaining: -100,
+              overspent: true,
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+      income: [],
+    });
+    expect((await run("budget", "--full")).json()).toEqual(budget);
   });
 
   it("rejects a bad month", async () => {

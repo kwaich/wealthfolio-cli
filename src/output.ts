@@ -57,3 +57,49 @@ function grid(columns: string[], rows: string[][]): string {
       .trimEnd();
   return [line(columns), line(widths.map((w) => "-".repeat(w))), ...rows.map(line)].join("\n");
 }
+
+/** A copy of `row` without `keys`. */
+export function omit<T extends object>(row: T, ...keys: string[]): T {
+  const copy = { ...row } as Record<string, unknown>;
+  for (const key of keys) delete copy[key];
+  return copy as T;
+}
+
+function pickPaths(row: unknown, paths: string[][]): unknown {
+  if (row === null || typeof row !== "object" || Array.isArray(row)) return row;
+  const out: Record<string, unknown> = {};
+  for (const path of paths) {
+    let source: unknown = row;
+    for (const key of path) {
+      source =
+        source !== null && typeof source === "object" && Object.hasOwn(source, key)
+          ? (source as Record<string, unknown>)[key]
+          : undefined;
+    }
+    if (source === undefined) continue;
+    let target = out;
+    for (const key of path.slice(0, -1)) {
+      target = (target[key] ??= {}) as Record<string, unknown>;
+    }
+    target[path.at(-1)!] = source;
+  }
+  return out;
+}
+
+/**
+ * Keeps only the dotted `fields` of each row: of each item of an array, of
+ * each item of `data` in a `{data, meta}` page (meta stays), or of an object.
+ */
+export function pick(value: unknown, fields: string[]): unknown {
+  const paths = fields.map((f) => f.split("."));
+  if (Array.isArray(value)) return value.map((row) => pickPaths(row, paths));
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray((value as { data?: unknown }).data)
+  ) {
+    const page = value as { data: unknown[] };
+    return { ...page, data: page.data.map((row) => pickPaths(row, paths)) };
+  }
+  return pickPaths(value, paths);
+}

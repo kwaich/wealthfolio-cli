@@ -47,12 +47,24 @@ export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerato
   }
 }
 
-/** The skip list names an asset id and a reason per skipped asset, around 2 KB, and never changes the outcome. */
-function withoutSkipped(data: unknown): unknown {
+/**
+ * The skip list names an asset id and a reason per skipped asset, around 2 KB, and never changes the outcome.
+ * Each failure's message ends with the provider's request URL, about 200 bytes that only repeat the symbol.
+ */
+function slimSync(data: unknown): unknown {
   if (typeof data !== "object" || data === null) return data;
   const rest: Record<string, unknown> = { ...data };
   delete rest.skipped_reasons;
   delete rest.show_skipped_reasons;
+  if (Array.isArray(rest.failed_syncs)) {
+    rest.failed_syncs = rest.failed_syncs.map((failure: unknown) =>
+      Array.isArray(failure)
+        ? failure.map((part) =>
+            typeof part === "string" ? part.replace(/ for url \(https?:[^)]*\)/g, "") : part,
+          )
+        : failure,
+    );
+  }
   return rest;
 }
 
@@ -119,7 +131,7 @@ export async function watchPortfolio(): Promise<Watch> {
     for await (const event of events) {
       switch (event.name) {
         case "market:sync-complete":
-          marketSync = withoutSkipped(event.data);
+          marketSync = slimSync(event.data);
           break;
         case "market:sync-error":
           marketError = event.data;

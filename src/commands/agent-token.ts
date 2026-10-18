@@ -11,7 +11,7 @@ import { clearAgentToken, loadAgentToken, saveAgentToken, type AgentToken } from
 import { intArg } from "./args";
 
 /** What `wf activity update` needs: read, preview (draft) and apply (write). */
-export const AGENT_SCOPES = ["activities:read", "activities:draft", "activities:write"];
+const AGENT_SCOPES = ["activities:read", "activities:draft", "activities:write"];
 
 interface CreatedToken {
   token: string;
@@ -30,7 +30,7 @@ function describe(token: AgentToken): Omit<AgentToken, "token"> {
 }
 
 /** The token for this server: WF_AGENT_TOKEN (never stored), else the stored one. */
-export function agentToken(client: Client): { token: string; profileId?: string } {
+function agentToken(client: Client): { token: string; profileId?: string } {
   const env = process.env.WF_AGENT_TOKEN;
   if (env) return { token: env, profileId: client.profileId };
   const stored = loadAgentToken();

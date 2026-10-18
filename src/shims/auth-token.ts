@@ -2,7 +2,7 @@
 // The browser shows a sign-in screen; the CLI stops with exit code 3.
 import { AuthError } from "../errors";
 
-export type AuthFailure = "expired" | "signIn";
+type AuthFailure = "expired" | "signIn";
 
 export const notifyUnauthorized = (reason: AuthFailure = "expired"): never => {
   if (reason === "signIn") {

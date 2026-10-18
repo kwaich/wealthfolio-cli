@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { targetFilter, today } from "../../src/commands/curated";
+import { targetFilter } from "../../src/commands/curated";
+import { today } from "../../src/commands/args";
 import { json, mockFetch, run, useTempConfig, type Recorded } from "../helpers";
 
 useTempConfig();

@@ -4,9 +4,9 @@ import { AuthError, ServerError } from "./errors";
 import { PROFILE_HINT } from "./shims/session";
 import { send } from "./transport";
 
-export const EVENTS_PATH = "/api/v1/events/stream";
+const EVENTS_PATH = "/api/v1/events/stream";
 
-export interface ServerEvent {
+interface ServerEvent {
   name: string;
   data: unknown;
 }
@@ -65,7 +65,7 @@ export interface WaitResult {
   marketSync?: unknown;
 }
 
-export interface Watch {
+interface Watch {
   /** Resolves when the portfolio job that starts after this call finishes. */
   done(timeoutMs: number): Promise<WaitResult>;
   close(): void;

@@ -5,7 +5,7 @@ import { print } from "./output";
 declare const __WF_VERSION__: string;
 export const VERSION = typeof __WF_VERSION__ === "string" ? __WF_VERSION__ : "0.0.0";
 
-export interface GlobalOptions {
+interface GlobalOptions {
   url?: string;
   table?: boolean;
 }

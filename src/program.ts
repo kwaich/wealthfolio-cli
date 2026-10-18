@@ -14,7 +14,7 @@ import { commandInfo, payloadHint } from "./payloads";
 import { addWaitOptions, withWait, type WaitOptions } from "./wait";
 
 /** Parses --args / --args-file / --args - into a payload object. */
-export async function readArgs(opts: {
+async function readArgs(opts: {
   args?: string;
   argsFile?: string;
 }): Promise<Record<string, unknown> | undefined> {

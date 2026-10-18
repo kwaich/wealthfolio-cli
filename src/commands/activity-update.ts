@@ -13,7 +13,7 @@ import { addWaitOptions, withWait, type WaitOptions } from "../wait";
 import { withMcp } from "./agent-token";
 import { collect } from "./args";
 
-export const MAX_UPDATES = 100;
+const MAX_UPDATES = 100;
 
 /** Flag name -> row field, for the fields the activity grid edits. */
 const FIELD_FLAGS = {
@@ -33,7 +33,7 @@ const FIELD_FLAGS = {
 } as const;
 
 /** Fields `--clear` may set to null: the optional ones. */
-export const CLEARABLE = [
+const CLEARABLE = [
   "subtype",
   "assetId",
   "quantity",
@@ -47,7 +47,7 @@ export const CLEARABLE = [
 
 type FieldFlag = keyof typeof FIELD_FLAGS;
 
-export type UpdateOptions = Partial<Record<FieldFlag, string>> & {
+type UpdateOptions = Partial<Record<FieldFlag, string>> & {
   approve?: boolean;
   clear: string[];
   updates?: string;
@@ -55,13 +55,13 @@ export type UpdateOptions = Partial<Record<FieldFlag, string>> & {
   dryRun?: boolean;
 } & WaitOptions;
 
-export interface FieldChange {
+interface FieldChange {
   field: string;
   current: unknown;
   proposed: unknown;
 }
 
-export interface PreviewRow {
+interface PreviewRow {
   index: number;
   activityId?: string;
   status: "ready" | "invalid";
@@ -71,12 +71,12 @@ export interface PreviewRow {
   error?: string;
 }
 
-export interface PreviewOutput {
+interface PreviewOutput {
   rows: PreviewRow[];
   summary: { total: number; ready: number; invalid: number };
 }
 
-export interface CommitOutput {
+interface CommitOutput {
   updated: {
     index: number;
     activityId: string;

@@ -1,14 +1,11 @@
+import { text } from "node:stream/consumers";
 import { UsageError } from "./errors";
 
 /** Reads all of stdin as text. */
-export async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk as Uint8Array));
-  return Buffer.concat(chunks).toString("utf8");
-}
+export const readStdin = (): Promise<string> => text(process.stdin);
 
 /** Reads a secret from the terminal without echo. Refuses when stdin is not a TTY. */
-export async function promptSecret(label: string): Promise<string> {
+async function promptSecret(label: string): Promise<string> {
   const { stdin, stderr } = process;
   if (!stdin.isTTY) {
     throw new UsageError(

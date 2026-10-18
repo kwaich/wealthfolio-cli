@@ -2,8 +2,8 @@ import { ServerError, UsageError } from "./errors";
 
 export const SESSION_COOKIE = "wf_session";
 /** Owner cookie the server sets when it runs without authentication. */
-export const BROWSER_COOKIE = "wf_browser";
-export const PROFILE_SCOPE_HEADER = "x-wf-profile-scope";
+const BROWSER_COOKIE = "wf_browser";
+const PROFILE_SCOPE_HEADER = "x-wf-profile-scope";
 /** Profile UUID header; /mcp picks the profile with it. */
 export const PROFILE_ID_HEADER = "x-wf-profile-id";
 
@@ -17,7 +17,7 @@ export interface TransportState {
   browserId?: string;
 }
 
-export interface Transport {
+interface Transport {
   state: TransportState;
   /** Called after a response changed token or browserId. */
   onChange?: (state: TransportState) => void;
@@ -29,7 +29,7 @@ export function setTransport(transport: Transport | undefined): void {
   current = transport;
 }
 
-export function getTransport(): Transport {
+function getTransport(): Transport {
   if (!current) throw new Error("Transport not configured");
   return current;
 }
@@ -55,7 +55,7 @@ export function parseSetCookies(headers: Headers): Map<string, string> {
  * a missing key becomes the text "undefined". Never send such a request: for
  * DELETE /accounts/undefined the server answers 200.
  */
-export function assertNoUndefinedInUrl(path: string): void {
+function assertNoUndefinedInUrl(path: string): void {
   const [pathname = "", query = ""] = path.split("?", 2);
   const segments = pathname.split("/").map(decodeURIComponent);
   const values = [...new URLSearchParams(query).values()];

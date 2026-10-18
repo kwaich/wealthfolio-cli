@@ -6,10 +6,10 @@ import { AuthError, ServerError } from "./errors";
 import { parseSse } from "./events";
 import { joinUrl, PROFILE_ID_HEADER } from "./transport";
 
-export const MCP_PATH = "/mcp";
+const MCP_PATH = "/mcp";
 const PROTOCOL_VERSION = "2025-06-18";
 
-export const MCP_OFF_HINT =
+const MCP_OFF_HINT =
   "Start the server with WF_MCP_ENABLED=true (AI Agent Access), then run `wf agent-token create`.";
 
 interface RpcResponse {
@@ -24,7 +24,7 @@ interface ToolResult {
   isError?: boolean;
 }
 
-export interface McpOptions {
+interface McpOptions {
   baseUrl: string;
   token: string;
   /** Profile the token belongs to; the server uses its default profile without it. */

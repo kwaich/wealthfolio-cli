@@ -11,7 +11,7 @@ export function payloadHint(command: string): string {
   return (PAYLOADS as Record<string, string>)[command] ?? "none";
 }
 
-export interface CommandInfo {
+interface CommandInfo {
   name: string;
   method: string;
   path: string;

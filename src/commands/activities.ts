@@ -13,7 +13,7 @@ import { registerActivityUpdate } from "./activity-update";
 import { collect, dateArg, intArg } from "./args";
 
 /** Max ids per call, as the MCP tools. */
-export const MAX_BATCH = 100;
+const MAX_BATCH = 100;
 
 type Status = "POSTED" | "DRAFT" | "PENDING" | "VOID";
 
@@ -48,7 +48,7 @@ interface RawActivity {
 }
 
 /** The fields the MCP update tools report, in one shape for both sources. */
-export interface StoredActivity {
+interface StoredActivity {
   id: string;
   date: string;
   accountId: string;
@@ -104,7 +104,7 @@ export function isBrokerSynced(a: RawActivity): boolean {
   return !manual && (!!blank(a.importRunId) || !!blank(a.sourceRecordId));
 }
 
-export function parseIds(ids: string[]): string[] {
+function parseIds(ids: string[]): string[] {
   const trimmed = ids.map((id) => id.trim());
   if (trimmed.length === 0) throw new UsageError("Give at least one activity id.");
   if (trimmed.length > MAX_BATCH) {
@@ -115,10 +115,7 @@ export function parseIds(ids: string[]): string[] {
 }
 
 /** Reads activities by id in one search. Missing ids are absent from the map. */
-export async function readActivities(
-  client: Client,
-  ids: string[],
-): Promise<Map<string, RawActivity>> {
+async function readActivities(client: Client, ids: string[]): Promise<Map<string, RawActivity>> {
   const unique = [...new Set(ids)];
   const res = await client.invoke<{ data: RawActivity[] }>("search_activities", {
     page: 0,
@@ -129,7 +126,7 @@ export async function readActivities(
 }
 
 /** The other leg of a linked transfer, if `id` is one leg. */
-export async function linkedLeg(client: Client, id: string): Promise<RawActivity | undefined> {
+async function linkedLeg(client: Client, id: string): Promise<RawActivity | undefined> {
   const pair = await client.invoke<{ transferOut: RawActivity; transferIn: RawActivity } | null>(
     "get_transfer_pair_for_activity",
     { activityId: id },
@@ -253,7 +250,7 @@ function brokerWarning(activity: RawActivity, linked?: RawActivity): string | un
   );
 }
 
-export type StatusChange = "void" | "restore";
+type StatusChange = "void" | "restore";
 
 /** New status for a void or restore, or why it is refused. Mirrors the MCP rules. */
 export function planStatus(

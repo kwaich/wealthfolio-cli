@@ -20,25 +20,25 @@ import {
 
 const API = "/api/v1";
 
-export interface ProfileSummary {
+interface ProfileSummary {
   id: string;
   name: string;
   lockEnabled: boolean;
   [key: string]: unknown;
 }
 
-export interface ProfileState {
+interface ProfileState {
   profiles: ProfileSummary[];
   session: { profileId: string; scopeId: string } | null;
   [key: string]: unknown;
 }
 
-export interface AuthStatus {
+interface AuthStatus {
   requiresPassword: boolean;
   oidcEnabled: boolean;
 }
 
-export interface OpenOptions {
+interface OpenOptions {
   /** --url flag; wins over WF_URL and the config file. */
   url?: string;
   env?: NodeJS.ProcessEnv;
@@ -46,7 +46,7 @@ export interface OpenOptions {
   config?: Config;
 }
 
-export function resolveUrl(flag: string | undefined, env: NodeJS.ProcessEnv, config: Config) {
+function resolveUrl(flag: string | undefined, env: NodeJS.ProcessEnv, config: Config) {
   const raw = flag || env.WF_URL || config.url;
   if (!raw) {
     throw new UsageError(
@@ -274,7 +274,7 @@ function errorMessage(text: string): string {
   return text.trim();
 }
 
-export function toWfError(error: unknown, command: string): WfError {
+function toWfError(error: unknown, command: string): WfError {
   if (
     error instanceof ServerError &&
     !error.hint &&

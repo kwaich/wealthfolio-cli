@@ -31,8 +31,6 @@ export function targetFilter(target: AllocationTarget): AccountScope {
   return { type: "all" };
 }
 
-export { today };
-
 export function registerCurated(program: Command): void {
   // The server's sync_market_data handler queues the same portfolio job that
   // update_portfolio queues, with the requested sync mode. Calling both would

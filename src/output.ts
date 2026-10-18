@@ -1,4 +1,4 @@
-export interface OutputOptions {
+interface OutputOptions {
   table?: boolean;
 }
 

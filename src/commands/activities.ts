@@ -408,7 +408,7 @@ export function registerActivities(program: Command): void {
         });
         if (opts.brief) {
           result.data = (result.data as Record<string, unknown>[]).map((row) =>
-            Object.fromEntries(BRIEF_FIELDS.filter((f) => f in row).map((f) => [f, row[f]])),
+            Object.fromEntries(BRIEF_FIELDS.map((f) => [f, row[f]])),
           );
         }
         // A table shows the rows; JSON keeps meta.totalRowCount for paging.

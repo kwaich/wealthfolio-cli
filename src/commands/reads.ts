@@ -11,7 +11,7 @@ interface Holding {
 }
 
 // The classification tree (sectors, regions, colours) is most of a holding's size.
-function slim<T extends Holding>(holding: T): T {
+function slim(holding: Holding): Holding {
   const copy = { ...holding, ...(holding.instrument && { instrument: { ...holding.instrument } }) };
   delete copy.metadata;
   delete copy.instrument?.classifications;

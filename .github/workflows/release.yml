@@ -1,0 +1,49 @@
+name: Release
+
+# Push a tag that matches package.json, for example:
+#   npm version 0.2.0 && git push --follow-tags
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tag matches package.json version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Pack
+        run: |
+          mkdir out
+          npm pack --pack-destination out
+          # Stable names, so releases/latest/download/<name> always works.
+          cp out/wealthfolio-cli-*.tgz out/wealthfolio-cli.tgz
+          cp dist/wf.js out/wf.js
+      - name: Install the tarball and run it
+        run: |
+          npm install -g --prefix "$RUNNER_TEMP/wf" out/wealthfolio-cli.tgz
+          "$RUNNER_TEMP/wf/bin/wf" --version
+          node out/wf.js --version
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "UPSTREAM_TAG"
   ],
   "engines": {

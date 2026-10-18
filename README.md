@@ -185,6 +185,22 @@ quotes and then recalculates the portfolio in the background.
 | 2    | Usage error: bad flags, bad JSON, unknown command, missing payload key |
 | 3    | Auth: not logged in, session expired, or no unlocked profile           |
 
+## Agent skill
+
+[`skills/wealthfolio/SKILL.md`](skills/wealthfolio/SKILL.md) teaches an agent
+to use `wf` safely: preview and confirm before each write, `--wait` before
+reading back, what each exit code means, and how to recover from a rejected
+payload. To install it for Claude Code:
+
+```sh
+mkdir -p ~/.claude/skills
+cp -r skills/wealthfolio ~/.claude/skills/
+# or from an npm install:
+cp -r "$(npm root -g)/wealthfolio-cli/skills/wealthfolio" ~/.claude/skills/
+```
+
+Other agents that read `SKILL.md` files can use the same file.
+
 ## Examples for agents
 
 ```sh

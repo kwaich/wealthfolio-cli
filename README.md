@@ -35,13 +35,15 @@ chmod +x ~/.local/bin/wf
 
 ```sh
 git clone https://github.com/kwaich/wealthfolio-cli && cd wealthfolio-cli
-npm install          # also builds dist/wf.js
+corepack enable      # provides the pnpm version the repo pins
+pnpm install         # also builds dist/wf.js
 npm install -g .     # puts `wf` on your PATH
 ```
 
-`npm install -g .` links to the clone, so keep the folder. With pnpm:
-`pnpm install && pnpm build && npm link`. To update, run `git pull` and
-`npm install` in the clone.
+`npm install -g .` links to the clone, so keep the folder. To update, run
+`git pull` and `pnpm install` in the clone. Without pnpm, `npm install` also
+works, but npm does not read `pnpm-lock.yaml`: it resolves the dependency
+versions again and writes a `package-lock.json`.
 
 `npm install -g github:kwaich/wealthfolio-cli` does not work. npm runs the
 clone's own install as a global one, so the build tools are missing when it
@@ -77,8 +79,12 @@ Otherwise:
 wf profile list
 wf profile use Work                 # id or name; prompts if the profile has a password
 WF_PROFILE_PASSWORD=... wf profile use Work --save   # --save: unlock it after each login
+printf '%s' "$PW" | wf profile use Work --password-stdin
 wf profile lock
 ```
+
+`wf login --profile <id>` unlocks that profile right after login and saves
+it as the default.
 
 A profile with a password locks again after 5 minutes without use (a server
 rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
@@ -100,26 +106,26 @@ rule). Then commands exit with code 3 and `PROFILE_LOCKED`; run
 
 ## Commands
 
-| Command                                                                  | What it does                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `wf login` / `wf logout` / `wf status`                                   | Session; `status` also warns when the server version is not `UPSTREAM_TAG`.                                                                                                                                                    |
-| `wf commands [--filter x]`                                               | Every command: method, path, and the payload type `invoke` reads.                                                                                                                                                              |
-| `wf schema <command>`                                                    | Payload and response types of one command, expanded, with field notes.                                                                                                                                                         |
-| `wf call <command> [--args json \| --args-file f \| --args -] [--wait]`  | Runs a command. `-` reads stdin.                                                                                                                                                                                               |
-| `wf sync [--asset id]... [--refetch-all \| --recent-days n]`             | Syncs market data and updates the portfolio.                                                                                                                                                                                   |
-| `wf accounts [--all]`                                                    | Accounts, with tracking mode, group and sync provider.                                                                                                                                                                         |
-| `wf holdings [--account id [--include-closed]]`                          | Holdings, cash included, with asset id, local values and FX rate.                                                                                                                                                              |
-| `wf activity search [filters]`                                           | Activities, newest first, with tax, subtype, status, review flag and source. Filters: `--account`, `--type`, `--id` (each repeatable), `--from`, `--to`, `--needs-review` or `--reviewed`, `--asset`, `--page`, `--page-size`. |
-| `wf activity update <id> [--field value]... [--dry-run]`                 | Corrects activity fields with the server's own rules; `--updates` for a batch. Needs `wf agent-token create`.                                                                                                                  |
-| `wf agent-token create\|show\|delete`                                    | The access token for the server's MCP endpoint, which `activity update` uses.                                                                                                                                                  |
-| `wf activity delete <id>... [--dry-run]`                                 | Deletes up to 100 activities. One leg of a linked transfer deletes both.                                                                                                                                                       |
-| `wf activity void <id>... [--dry-run]`                                   | Voids posted activities: kept, but out of holdings, cash and performance.                                                                                                                                                      |
-| `wf activity restore <id>... [--dry-run]`                                | Posts voided activities again.                                                                                                                                                                                                 |
-| `wf health [--refresh]`                                                  | Health Center status; `--refresh` runs the checks first.                                                                                                                                                                       |
-| `wf rebalance [--target id\|name] [--cash n [--mode m] [--asset id]...]` | Drift against an allocation target; with `--cash`, a rebalance plan.                                                                                                                                                           |
-| `wf spending report [--from d] [--to d] [--account id]...`               | Spending report (default: this month so far).                                                                                                                                                                                  |
-| `wf budget [--period YYYY-MM]`                                           | Budget snapshot.                                                                                                                                                                                                               |
-| `wf alt-asset value <id> <amount> [--date d] [--notes t]`                | Records a valuation for a property, vehicle, and so on.                                                                                                                                                                        |
+| Command                                                                               | What it does                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wf login` / `wf logout` / `wf status`                                                | Session; `status` also warns when the server version is not `UPSTREAM_TAG`.                                                                                                                                                    |
+| `wf commands [--filter x]`                                                            | Every command: method, path, and the payload type `invoke` reads.                                                                                                                                                              |
+| `wf schema <command>`                                                                 | Payload and response types of one command, expanded, with field notes.                                                                                                                                                         |
+| `wf call <command> [--args json \| --args-file f \| --args -] [--wait]`               | Runs a command. `-` reads stdin.                                                                                                                                                                                               |
+| `wf sync [--asset id]... [--refetch-all \| --recent-days n]`                          | Syncs market data and updates the portfolio.                                                                                                                                                                                   |
+| `wf accounts [--all]`                                                                 | Accounts, with tracking mode, group and sync provider.                                                                                                                                                                         |
+| `wf holdings [--account id [--include-closed]]`                                       | Holdings, cash included, with asset id, local values and FX rate.                                                                                                                                                              |
+| `wf activity search [filters]`                                                        | Activities, newest first, with tax, subtype, status, review flag and source. Filters: `--account`, `--type`, `--id` (each repeatable), `--from`, `--to`, `--needs-review` or `--reviewed`, `--asset`, `--page`, `--page-size`. |
+| `wf activity update <id> [--field value]... [--dry-run]`                              | Corrects activity fields with the server's own rules; `--updates` for a batch. Needs `wf agent-token create`.                                                                                                                  |
+| `wf agent-token create\|show\|delete`                                                 | The access token for the server's MCP endpoint, which `activity update` uses.                                                                                                                                                  |
+| `wf activity delete <id>... [--dry-run]`                                              | Deletes up to 100 activities. One leg of a linked transfer deletes both.                                                                                                                                                       |
+| `wf activity void <id>... [--dry-run]`                                                | Voids posted activities: kept, but out of holdings, cash and performance.                                                                                                                                                      |
+| `wf activity restore <id>... [--dry-run]`                                             | Posts voided activities again.                                                                                                                                                                                                 |
+| `wf health [--refresh]`                                                               | Health Center status; `--refresh` runs the checks first.                                                                                                                                                                       |
+| `wf rebalance [--target id\|name] [--holdings] [--cash n [--mode m] [--asset id]...]` | Drift against an allocation target (`--holdings` adds the holdings); with `--cash`, a rebalance plan.                                                                                                                          |
+| `wf spending report [--from d] [--to d] [--account id]...`                            | Spending report (default: this month so far).                                                                                                                                                                                  |
+| `wf budget [--period YYYY-MM]`                                                        | Budget snapshot.                                                                                                                                                                                                               |
+| `wf alt-asset value <id> <amount> [--date d] [--notes t]`                             | Records a valuation for a property, vehicle, and so on.                                                                                                                                                                        |
 
 Add `--table` before or after the command for a human-readable table.
 
@@ -129,7 +135,7 @@ A write returns before the server recalculates the portfolio in the
 background. With `--wait`, `wf` follows the server's event stream (as the web
 app does) and returns when that update has finished, so the next read sees
 the new numbers. `--wait` works on `wf call` (not on read-only GET commands),
-`wf sync`, `wf alt-asset value`, and `wf activity delete|void|restore`.
+`wf sync`, `wf alt-asset value`, and `wf activity update|delete|void|restore`.
 `--wait-timeout <seconds>` defaults to 300.
 
 The output gets a `wait` object: `{status: "complete" | "error" | "timeout",
@@ -308,6 +314,7 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm test
 pnpm build                          # dist/wf.js, one file
 
 # Integration tests against the official image (needs Docker)
+pnpm build
 eval "$(WF_TEST_TTL_MINUTES=1 scripts/test-server.sh up)"
 WF_TEST_REFRESH=1 pnpm test:integration
 scripts/test-server.sh down

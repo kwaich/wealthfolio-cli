@@ -94,7 +94,7 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
   `status`, `date`, `quantity`, `unitPrice`, `amount`, `fee`, `currency`, `fxRate`,
   `needsReview`), and keep `--page-size` small unless the user wants the full
   list. Leave `--brief` off when you need `comment`, `source*`, `tax` or `accountName`.
-- Use `wf commands --filter <word>`, never bare `wf commands` (it prints every command, around 12k tokens).
+- `wf commands` lists names only. Add `--filter <word>` for method, path and payload.
 - A holding's `fxRate` is the current rate; an activity's `fxRate` is the rate
   it was recorded at.
 - `wf spending report` defaults to this month. It returns `current` and

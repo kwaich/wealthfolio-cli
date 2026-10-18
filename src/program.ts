@@ -196,12 +196,16 @@ export function buildProgram(): Command {
 
   program
     .command("commands")
-    .description(`List every command in the vendored ${UPSTREAM_TAG} contract`)
-    .option("--filter <text>", "only names that contain this text")
+    .description(
+      `List the commands in the vendored ${UPSTREAM_TAG} contract: names only, or with --filter their method, path and payload`,
+    )
+    .option("--filter <text>", "only names that contain this text, with method, path and payload")
     .action((opts: { filter?: string }, cmd: Command) => {
-      const filter = opts.filter?.toLowerCase();
+      // The full list is around 12k tokens, so it is names only.
+      if (!opts.filter) return output(cmd, Object.keys(COMMANDS));
+      const filter = opts.filter.toLowerCase();
       const rows = Object.entries(COMMANDS)
-        .filter(([name]) => !filter || name.includes(filter))
+        .filter(([name]) => name.includes(filter))
         .map(([name, { method, path }]) => ({ name, method, path, payload: payloadHint(name) }));
       output(cmd, rows);
     });

@@ -388,6 +388,19 @@ describe("reads and health", () => {
     expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/health/status"]);
   });
 
+  it("health drops each issue's diagnostics unless --full", async () => {
+    const issue = { id: "i1", title: "Cash went below zero", diagnostics: [{ code: "X" }] };
+    mockFetch(() => json({ overallSeverity: "WARNING", issues: [issue] }));
+    expect((await run("health")).json()).toEqual({
+      overallSeverity: "WARNING",
+      issues: [{ id: "i1", title: "Cash went below zero" }],
+    });
+    expect((await run("health", "--full")).json()).toEqual({
+      overallSeverity: "WARNING",
+      issues: [issue],
+    });
+  });
+
   it("health --refresh runs the checks in the app's configured timezone", async () => {
     const seen = mockFetch((req) =>
       req.path === "/api/v1/settings" ? json({ timezone: "Asia/Hong_Kong" }) : json({ issues: [] }),

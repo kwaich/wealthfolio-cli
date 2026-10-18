@@ -104,6 +104,8 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
 - `wf budget` returns `state` (groups, targets) and `computed` (`totals`,
   per-group rows). All zeros with empty `groupRows` means no budget is set up
   for that month; say so instead of reporting zero spending.
+- `wf health` leaves out each issue's `diagnostics` (it repeats `details` and
+  `affectedItems`). Add `--full` only if those don't explain an issue.
 - `wf holdings --account <id> --include-closed` also lists sold-out positions.
 
 For anything without its own command:

@@ -2,7 +2,7 @@
 // vendored invoke switch reads for its command (see `wf commands`).
 import { Command, Option } from "commander";
 import { UsageError } from "../errors";
-import { open, output } from "../context";
+import { appTimezone, open, output } from "../context";
 import { omit } from "../output";
 import { addWaitOptions, withWait, type WaitOptions } from "../wait";
 import {
@@ -14,6 +14,7 @@ import {
   monthArg,
   numberArg,
   today,
+  todayIn,
 } from "./args";
 
 type AccountScope =
@@ -156,17 +157,21 @@ export function registerCurated(program: Command): void {
         opts: { from?: string; to?: string; account?: string[]; full?: boolean },
         cmd: Command,
       ) => {
-        const endDate = opts.to ?? today();
+        if (opts.from && opts.to && opts.from > opts.to) {
+          throw new UsageError("--from must not be after --to.");
+        }
+        const client = open(cmd);
+        // The server reads RFC 3339 instants, and refuses a bare date once an
+        // account is tracked. As the web app: whole days in the app's timezone,
+        // and "today" there too.
+        const timezone = await appTimezone(client);
+        const endDate = opts.to ?? todayIn(timezone);
         // Without --from, report the month of --to; a past --to must not start after it.
         const startDate = opts.from ?? `${endDate.slice(0, 8)}01`;
         if (startDate > endDate) throw new UsageError("--from must not be after --to.");
-        const client = open(cmd);
-        // The server reads RFC 3339 instants, and refuses a bare date once an
-        // account is tracked. As the web app: whole days in the app's timezone.
-        const settings = await client.invoke<{ timezone?: string }>("get_settings");
         const request = {
-          startDate: dayBoundary(startDate, "start", settings?.timezone),
-          endDate: dayBoundary(endDate, "end", settings?.timezone),
+          startDate: dayBoundary(startDate, "start", timezone),
+          endDate: dayBoundary(endDate, "end", timezone),
           ...(opts.account ? { accountIds: opts.account } : {}),
         };
         const report = await client.invoke<Record<string, unknown>>("get_spending_report", {

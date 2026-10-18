@@ -3,7 +3,7 @@
 // id, local values, FX rate, ...). Holdings and health print a brief shape
 // unless asked (--full): agents pay for every byte.
 import type { Command } from "commander";
-import { open, output } from "../context";
+import { appTimezone, open, output } from "../context";
 import { omit } from "../output";
 
 type Money = { local: number; base: number } | null | undefined;
@@ -149,8 +149,7 @@ export function registerReads(program: Command): void {
       }
       // As the MCP tool: check in the timezone configured in the app, not the
       // machine's. Without one, the vendored invoke sends the local timezone.
-      const settings = await client.invoke<{ timezone?: string }>("get_settings");
-      const timezone = settings?.timezone?.trim();
+      const timezone = await appTimezone(client);
       show(
         await client.invoke<Health>(
           "run_health_checks",

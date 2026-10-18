@@ -20,6 +20,12 @@ export function open(cmd: Command): Client {
   return Client.open({ url: globals(cmd).url });
 }
 
+/** The timezone set in the app, if any (get_settings). */
+export async function appTimezone(client: Client): Promise<string | undefined> {
+  const settings = await client.invoke<{ timezone?: string }>("get_settings");
+  return settings?.timezone?.trim() || undefined;
+}
+
 export function output(cmd: Command, value: unknown): void {
   const { table, fields } = globals(cmd);
   print(fields ? pick(value, fields) : value, { table });

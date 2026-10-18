@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Argument, Command } from "commander";
+import { Argument, Command, InvalidArgumentError } from "commander";
 import { Client } from "./client";
 import { globals, open, output, VERSION } from "./context";
 import { registerActivities } from "./commands/activities";
@@ -60,11 +60,14 @@ export function buildProgram(): Command {
     .option(
       "--fields <list>",
       "print only these comma-separated fields of each row (dotted paths, such as instrument.symbol)",
-      (list: string) =>
-        list
+      (list: string) => {
+        const fields = list
           .split(",")
           .map((f) => f.trim())
-          .filter(Boolean),
+          .filter(Boolean);
+        if (fields.length === 0) throw new InvalidArgumentError("Name at least one field.");
+        return fields;
+      },
     )
     // Must come before subcommands are added: they copy it at creation.
     // main() maps commander errors to exit code 2.

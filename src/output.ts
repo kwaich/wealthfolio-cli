@@ -72,7 +72,7 @@ function pickPaths(row: unknown, paths: string[][]): unknown {
     let source: unknown = row;
     for (const key of path) {
       source =
-        source !== null && typeof source === "object"
+        source !== null && typeof source === "object" && Object.hasOwn(source, key)
           ? (source as Record<string, unknown>)[key]
           : undefined;
     }

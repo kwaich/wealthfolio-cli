@@ -425,6 +425,14 @@ describe("reads and health", () => {
     ).toEqual([{ instrument: { symbol: "SAP" }, weight: 1 }]);
   });
 
+  it("--fields refuses an empty list, and ignores inherited properties", async () => {
+    mockFetch(() => json([{ id: "h1" }]));
+    expect((await run("holdings", "--fields", ",")).code).toBe(2);
+    expect((await run("holdings", "--full", "--fields", "constructor.name,id")).json()).toEqual([
+      { id: "h1" },
+    ]);
+  });
+
   it("health reads the cached status", async () => {
     const seen = mockFetch(() => json({ overallSeverity: "INFO", issues: [] }));
     await run("health");

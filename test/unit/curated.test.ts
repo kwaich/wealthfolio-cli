@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { targetFilter } from "../../src/commands/curated";
-import { dayBoundary, today } from "../../src/commands/args";
+import { dayBoundary, today, todayIn } from "../../src/commands/args";
 import { json, mockFetch, run, useTempConfig, type Recorded } from "../helpers";
 
 useTempConfig();
@@ -218,6 +218,8 @@ describe("wf spending report", () => {
 describe("dayBoundary", () => {
   it("handles UTC, offsets and a DST change", () => {
     expect(dayBoundary("2025-11-01", "start", "UTC")).toBe("2025-11-01T00:00:00.000Z");
+    expect(todayIn("Asia/Tokyo", new Date("2026-10-31T16:00:00Z"))).toBe("2026-11-01");
+    expect(todayIn("America/Los_Angeles", new Date("2026-11-01T03:00:00Z"))).toBe("2026-10-31");
     expect(dayBoundary("2025-11-01", "start", "America/New_York")).toBe("2025-11-01T04:00:00.000Z");
     // London moves to BST at 01:00 UTC on 2025-03-30; the day ends at 22:59:59.999 UTC.
     expect(dayBoundary("2025-03-30", "end", "Europe/London")).toBe("2025-03-30T22:59:59.999Z");

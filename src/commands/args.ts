@@ -59,6 +59,16 @@ function resolveTimezone(timezone?: string | null): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** Today's calendar date as YYYY-MM-DD in `timezone` (else this machine's). */
+export function todayIn(timezone?: string | null, now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: resolveTimezone(timezone),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 /** How far `timezone`'s wall clock is ahead of UTC at `instant`, in ms. */
 function offsetMs(instant: Date, timezone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {

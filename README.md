@@ -19,13 +19,18 @@ upstream releases a new version.
 Needs Node.js 20 or later.
 
 ```sh
-# From git (builds on install)
-npm install -g github:kwaich/wealthfolio-cli
-
-# Or from a clone
 git clone https://github.com/kwaich/wealthfolio-cli && cd wealthfolio-cli
-pnpm install && pnpm build && npm link
+npm install          # also builds dist/wf.js
+npm install -g .     # puts `wf` on your PATH
 ```
+
+`npm install -g .` links to the clone, so keep the folder. With pnpm:
+`pnpm install && pnpm build && npm link`. To update, run `git pull` and
+`npm install` in the clone.
+
+`npm install -g github:kwaich/wealthfolio-cli` does not work. npm runs the
+clone's own install as a global one, so the build tools are missing when it
+builds.
 
 ## Log in
 
@@ -195,7 +200,7 @@ payload. To install it for Claude Code:
 ```sh
 mkdir -p ~/.claude/skills
 cp -r skills/wealthfolio ~/.claude/skills/
-# or from an npm install:
+# or from anywhere, after `npm install -g .`:
 cp -r "$(npm root -g)/wealthfolio-cli/skills/wealthfolio" ~/.claude/skills/
 ```
 

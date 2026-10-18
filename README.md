@@ -337,7 +337,9 @@ git push --follow-tags
 The `Release` workflow runs on the tag. It checks that the tag matches
 `package.json`, runs the checks, builds, installs the packed tarball as a
 smoke test, and creates a GitHub release with `wealthfolio-cli-<version>.tgz`,
-`wealthfolio-cli.tgz` and `wf.js` attached.
+`wealthfolio-cli.tgz` and `wf.js` attached. The CLI has its own version; the
+release title names the Wealthfolio version from `UPSTREAM_TAG`, for example
+`v0.2.0 (Wealthfolio v3.10.0)`.
 
 ## License
 

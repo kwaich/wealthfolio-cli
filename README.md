@@ -19,6 +19,21 @@ upstream releases a new version.
 Needs Node.js 20 or later.
 
 ```sh
+npm install -g https://github.com/kwaich/wealthfolio-cli/releases/latest/download/wealthfolio-cli.tgz
+```
+
+Run the same command again to update. For a fixed version, use
+`.../releases/download/v0.1.0/wealthfolio-cli-0.1.0.tgz`. Each release also
+has `wf.js`, the CLI as one file with no dependencies, if you do not want npm:
+
+```sh
+curl -fsSL -o ~/.local/bin/wf https://github.com/kwaich/wealthfolio-cli/releases/latest/download/wf.js
+chmod +x ~/.local/bin/wf
+```
+
+### From source
+
+```sh
 git clone https://github.com/kwaich/wealthfolio-cli && cd wealthfolio-cli
 npm install          # also builds dist/wf.js
 npm install -g .     # puts `wf` on your PATH
@@ -311,6 +326,20 @@ scripts/vendor.sh v3.11.0           # copies files, rewrites UPSTREAM_TAG and sr
 Allow GitHub Actions to create and approve pull requests_. PRs opened by the
 workflow token do not start CI on their own; push a commit or re-run CI on the
 PR before merging.
+
+### Releasing
+
+```sh
+npm version 0.2.0 -m "Release %s"   # bumps package.json, commits, tags v0.2.0
+git push --follow-tags
+```
+
+The `Release` workflow runs on the tag. It checks that the tag matches
+`package.json`, runs the checks, builds, installs the packed tarball as a
+smoke test, and creates a GitHub release with `wealthfolio-cli-<version>.tgz`,
+`wealthfolio-cli.tgz` and `wf.js` attached. The CLI has its own version; the
+release title names the Wealthfolio version from `UPSTREAM_TAG`, for example
+`v0.2.0 (Wealthfolio v3.10.0)`.
 
 ## License
 

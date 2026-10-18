@@ -26,12 +26,10 @@
     "prepare": "tsup"
   },
   "packageManager": "pnpm@10.28.0",
-  "dependencies": {
-    "commander": "^14.0.3"
-  },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^20.19.43",
+    "commander": "^14.0.3",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",

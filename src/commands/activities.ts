@@ -299,6 +299,9 @@ export function statusUpdate(activity: RawActivity, status: Status): Record<stri
   return {
     id: s.id,
     accountId: s.accountId,
+    // The effective type, as the web app and the MCP update tool send it. For
+    // a broker-synced activity the server keeps the stored base type and
+    // records the type sent as the override, so both stay as they were.
     activityType: s.activityType,
     activityDate: s.date,
     currency: s.currency,

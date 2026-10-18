@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSse } from "../../src/events";
-import { json, mockFetch, run, useTempConfig, type Recorded } from "../helpers";
+import { json, mockFetch, run, text, useTempConfig, type Recorded } from "../helpers";
 
 useTempConfig();
 
@@ -181,5 +181,26 @@ describe("wf schema", () => {
 
   it("exits 2 for an unknown command", async () => {
     expect((await run("schema", "nope")).code).toBe(2);
+  });
+});
+
+describe("--wait auth failures", () => {
+  it("a 401 from the event stream is an auth error (exit 3), and nothing is written", async () => {
+    const seen = mockFetch((req) =>
+      req.path === "/api/v1/events/stream"
+        ? json({ error: "unauthorized" }, { status: 401 })
+        : json(null),
+    );
+    const res = await run(...createArgs, "--wait");
+    expect(res.code).toBe(3);
+    expect(res.stderr).toContain("wf login");
+    expect(seen.map((r) => r.path)).toEqual(["/api/v1/events/stream"]);
+  });
+
+  it("a locked profile on the event stream is an auth error with the profile hint", async () => {
+    mockFetch(() => text("PROFILE_LOCKED: unlock the profile", 423));
+    const res = await run(...createArgs, "--wait");
+    expect(res.code).toBe(3);
+    expect(res.stderr).toContain("wf profile list");
   });
 });

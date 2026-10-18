@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { Client } from "../../src/client";
@@ -267,5 +267,25 @@ describe("wf logout", () => {
     expect((await run("logout")).code).toBe(0);
     expect(seen[0]).toMatchObject({ method: "POST", path: "/api/v1/auth/logout" });
     expect(() => readSession()).toThrow();
+  });
+});
+
+describe("session file writes", () => {
+  it("replaces the file in one step, 0600, with no temporary file left", async () => {
+    const { saveSession } = await import("../../src/store");
+    writeFileSync(sessionFile(), "{}", { mode: 0o644 });
+    saveSession({ url: BASE, token: "t1" });
+    expect(statSync(sessionFile()).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(sessionFile(), "utf8"))).toEqual({ url: BASE, token: "t1" });
+    expect(readdirSync(cfg.dir()).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("swaps in a new file instead of rewriting the old one in place", async () => {
+    const { saveSession } = await import("../../src/store");
+    saveSession({ url: BASE, token: "old" });
+    const before = statSync(sessionFile()).ino;
+    saveSession({ url: BASE, token: "new" });
+    // A rename gives a new inode; an in-place write, which a crash can truncate, keeps it.
+    expect(statSync(sessionFile()).ino).not.toBe(before);
   });
 });

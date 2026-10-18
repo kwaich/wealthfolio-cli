@@ -1,6 +1,7 @@
 // Waits for the server's background portfolio job through its event stream
 // (GET /api/v1/events/stream, server-sent events), as the web app does.
-import { ServerError } from "./errors";
+import { AuthError, ServerError } from "./errors";
+import { PROFILE_HINT } from "./shims/session";
 import { send } from "./transport";
 
 export const EVENTS_PATH = "/api/v1/events/stream";
@@ -86,6 +87,13 @@ export async function watchPortfolio(): Promise<Watch> {
   );
   if (!res.ok || !res.body) {
     controller.abort();
+    if (res.status === 401) {
+      throw new AuthError("Not logged in, or the session expired.", "Run `wf login`.");
+    }
+    if (res.status === 423) {
+      const text = (await res.text()).trim();
+      if (text.startsWith("PROFILE_")) throw new AuthError(text, PROFILE_HINT);
+    }
     throw new ServerError(
       `Cannot open the event stream (${res.status} ${res.statusText}).`,
       res.status,

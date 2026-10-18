@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { UsageError } from "./errors";
@@ -38,11 +46,24 @@ function readJson<T>(path: string): T | undefined {
   }
 }
 
+/**
+ * Writes to a temporary file in the same directory, then renames it over
+ * `path`. A crash or a full disk mid-write leaves the old file intact, never
+ * a truncated one. The temporary file has `mode` from the start, so a secret
+ * is never readable by others, even briefly.
+ */
 function writeJson(path: string, value: unknown, mode: number): void {
   mkdirSync(configDir(), { recursive: true, mode: 0o700 });
-  writeFileSync(path, JSON.stringify(value, null, 2) + "\n", { mode });
-  // writeFileSync keeps the old mode of an existing file.
-  chmodSync(path, mode);
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode, flag: "w" });
+    // The umask can narrow the mode on creation, and a stale temp file keeps its old one.
+    chmodSync(tmp, mode);
+    renameSync(tmp, path);
+  } catch (error) {
+    rmSync(tmp, { force: true });
+    throw error;
+  }
 }
 
 export function loadConfig(): Config {

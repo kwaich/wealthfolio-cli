@@ -85,6 +85,21 @@ describe("--wait", () => {
     });
   });
 
+  it("drops the list of skipped assets from marketSync", async () => {
+    server([
+      event("portfolio:update-start"),
+      event(
+        "market:sync-complete",
+        '{"failed_syncs":[["a","boom"]],"show_skipped_reasons":false,"skipped_reasons":[["b","Inactive asset"]]}',
+      ),
+      event("portfolio:update-complete"),
+    ]);
+    const res = await run(...createArgs, "--wait");
+    expect((res.json() as { wait: { marketSync: unknown } }).wait.marketSync).toEqual({
+      failed_syncs: [["a", "boom"]],
+    });
+  });
+
   it("ignores the end of a job that was running before the write", async () => {
     server([
       event("portfolio:update-complete"),

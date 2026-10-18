@@ -139,7 +139,9 @@ the new numbers. `--wait` works on `wf call` (not on read-only GET commands),
 `--wait-timeout <seconds>` defaults to 300.
 
 The output gets a `wait` object: `{status: "complete" | "error" | "timeout",
-seconds, error?, marketSync?}`. `wf call --wait` wraps the response as
+seconds, error?, marketSync?}`. `marketSync` is the server's quote sync result
+without its list of skipped assets, so look at `failed_syncs` for failures.
+`wf call --wait` wraps the response as
 `{result, wait}`. An error or a timeout exits 1; the write has happened
 either way. Another client's update that starts during the wait can end it
 early.

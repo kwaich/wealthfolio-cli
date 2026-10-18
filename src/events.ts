@@ -47,6 +47,15 @@ export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerato
   }
 }
 
+/** The skip list names an asset id and a reason per skipped asset, around 2 KB, and never changes the outcome. */
+function withoutSkipped(data: unknown): unknown {
+  if (typeof data !== "object" || data === null) return data;
+  const rest: Record<string, unknown> = { ...data };
+  delete rest.skipped_reasons;
+  delete rest.show_skipped_reasons;
+  return rest;
+}
+
 function parseData(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -110,7 +119,7 @@ export async function watchPortfolio(): Promise<Watch> {
     for await (const event of events) {
       switch (event.name) {
         case "market:sync-complete":
-          marketSync = event.data;
+          marketSync = withoutSkipped(event.data);
           break;
         case "market:sync-error":
           marketError = event.data;

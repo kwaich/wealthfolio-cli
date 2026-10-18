@@ -1,0 +1,129 @@
+name: Upstream drift
+
+# Weekly: if upstream Wealthfolio has a newer release than UPSTREAM_TAG,
+# re-vendor the web adapter contract, run every check against the new server
+# image, and open a PR with the core.ts diff.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream tag to vendor (default: latest release)"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find the latest upstream release
+        id: tag
+        run: |
+          latest="${{ inputs.tag }}"
+          if [ -z "$latest" ]; then
+            latest="$(gh release view --repo wealthfolio/wealthfolio --json tagName --jq .tagName || true)"
+          fi
+          if [ -z "$latest" ]; then
+            latest="$(git ls-remote --tags --refs https://github.com/wealthfolio/wealthfolio \
+              | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          fi
+          current="$(tr -d '[:space:]' < UPSTREAM_TAG)"
+          echo "latest=$latest current=$current"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          branch="upstream/$latest"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$current" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "Branch $branch exists; a PR is already open or was closed on purpose."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.tag.outputs.skip == 'false'
+        uses: pnpm/action-setup@v4
+      - if: steps.tag.outputs.skip == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.tag.outputs.skip == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Re-vendor
+        if: steps.tag.outputs.skip == 'false'
+        run: |
+          old="vendor/upstream/${{ steps.tag.outputs.current }}/adapters/web/core.ts"
+          cp "$old" "$RUNNER_TEMP/core.old.ts"
+          scripts/vendor.sh "${{ steps.tag.outputs.latest }}"
+          new="vendor/upstream/${{ steps.tag.outputs.latest }}/adapters/web/core.ts"
+          diff -u --label "core.ts ${{ steps.tag.outputs.current }}" --label "core.ts ${{ steps.tag.outputs.latest }}" \
+            "$RUNNER_TEMP/core.old.ts" "$new" > "$RUNNER_TEMP/core.diff" || true
+
+      - name: Checks
+        id: checks
+        if: steps.tag.outputs.skip == 'false'
+        continue-on-error: true
+        run: |
+          set +e
+          # Output of each check goes to the job log; the table goes to the PR.
+          result() { if "$@" >&2; then echo "| \`$*\` | pass |"; else echo "| \`$*\` | **FAIL** |"; fail=1; fi; }
+          fail=0
+          {
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            result pnpm typecheck
+            result pnpm test
+            result pnpm build
+            if scripts/test-server.sh up > "$RUNNER_TEMP/server.env"; then
+              . "$RUNNER_TEMP/server.env"
+              result pnpm test:integration
+              scripts/test-server.sh down
+            else
+              echo "| \`scripts/test-server.sh up\` | **FAIL** (image missing or did not start) |"
+              fail=1
+            fi
+          } > "$RUNNER_TEMP/checks.md"
+          cat "$RUNNER_TEMP/checks.md"
+          exit $fail
+
+      - name: Open PR
+        if: steps.tag.outputs.skip == 'false'
+        run: |
+          latest="${{ steps.tag.outputs.latest }}"
+          current="${{ steps.tag.outputs.current }}"
+          branch="${{ steps.tag.outputs.branch }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A vendor src/contract.ts UPSTREAM_TAG
+          git commit -m "chore: vendor upstream $latest"
+          git push origin "$branch"
+          {
+            echo "Upstream released [$latest](https://github.com/wealthfolio/wealthfolio/releases/tag/$latest). This PR re-vendors the web adapter contract (was $current)."
+            echo
+            echo "## Checks (run in the drift workflow against \`wealthfolio/wealthfolio:${latest#v}\`)"
+            echo
+            cat "$RUNNER_TEMP/checks.md"
+            echo
+            echo "PRs opened with the workflow token do not trigger CI. Push a commit or re-run CI from the Actions tab before merging."
+            echo
+            echo "## core.ts diff"
+            echo
+            echo '```diff'
+            head -c 50000 "$RUNNER_TEMP/core.diff"
+            [ "$(wc -c < "$RUNNER_TEMP/core.diff")" -gt 50000 ] && echo "... (truncated; see the Files tab)"
+            echo '```'
+            echo
+            echo "Review new or changed cases in the invoke switch against the curated commands in src/commands/curated.ts."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --title "Vendor upstream $latest" --body-file "$RUNNER_TEMP/body.md" --head "$branch"

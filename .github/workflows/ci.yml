@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - name: Vendored files are unedited
+        run: git diff --exit-code -- vendor src/contract.ts UPSTREAM_TAG
+      - run: pnpm test
+      - run: pnpm build
+      - run: node dist/wf.js --version
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Start the official server image (tag from UPSTREAM_TAG)
+        run: WF_TEST_TTL_MINUTES=1 scripts/test-server.sh up | sed 's/^export //' >> "$GITHUB_ENV"
+      - name: Integration tests
+        run: pnpm test:integration
+        env:
+          WF_TEST_REFRESH: "1"
+      - name: Server logs
+        if: failure()
+        run: docker logs wf-cli-test
+      - if: always()
+        run: scripts/test-server.sh down

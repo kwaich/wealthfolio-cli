@@ -311,14 +311,20 @@ describe("wf activity search", () => {
     expect((await run("activity", "search", "--type", "GIFT")).code).toBe(2);
   });
 
-  it("--brief keeps the main fields and meta", async () => {
+  it("asks for 20 rows by default", async () => {
+    const seen = mockFetch(() => json({ data: [], meta: {} }));
+    await run("activity", "search");
+    expect((seen[0]!.body as Record<string, unknown>).pageSize).toBe(20);
+  });
+
+  it("keeps the main fields and meta", async () => {
     mockFetch(() =>
       json({
         data: [activity("a1", { assetSymbol: "BLOK", idempotencyKey: "k", accountName: "CMC" })],
         meta: { totalRowCount: 1 },
       }),
     );
-    const out = (await run("activity", "search", "--brief")).json() as {
+    const out = (await run("activity", "search")).json() as {
       data: Record<string, unknown>[];
       meta: unknown;
     };
@@ -334,6 +340,16 @@ describe("wf activity search", () => {
       currency: "USD",
       needsReview: false,
     });
+  });
+
+  it("--full returns every field", async () => {
+    mockFetch(() =>
+      json({ data: [activity("a1", { idempotencyKey: "k" })], meta: { totalRowCount: 1 } }),
+    );
+    const out = (await run("activity", "search", "--full")).json() as {
+      data: Record<string, unknown>[];
+    };
+    expect(out.data[0]).toMatchObject({ id: "a1", idempotencyKey: "k", comment: "note" });
   });
 });
 

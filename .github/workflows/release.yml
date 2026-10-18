@@ -40,7 +40,7 @@ jobs:
           cp dist/wf.js out/wf.js
       - name: Install the tarball and run it
         run: |
-          npm install -g --prefix "$RUNNER_TEMP/wf" out/wealthfolio-cli.tgz
+          npm install -g --prefix "$RUNNER_TEMP/wf" ./out/wealthfolio-cli.tgz
           "$RUNNER_TEMP/wf/bin/wf" --version
           node out/wf.js --version
       - name: Create release

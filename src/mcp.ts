@@ -142,13 +142,19 @@ async function readReply(res: Response, id: number): Promise<RpcResponse> {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) {
     return (await res.json()) as RpcResponse;
   }
-  if (!res.body) throw new ServerError("MCP response had no body.");
-  for await (const event of parseSse(res.body)) {
+  const body = res.body;
+  if (!body) throw new ServerError("MCP response had no body.");
+  let reply: RpcResponse | undefined;
+  for await (const event of parseSse(body)) {
     const data = event.data as RpcResponse | string;
     if (typeof data === "object" && data !== null && data.id === id) {
-      await res.body.cancel().catch(() => {});
-      return data;
+      reply = data;
+      break;
     }
   }
-  throw new ServerError("The MCP response ended without a reply.");
+  // Leaving the loop released the parser's reader lock, so the stream can be
+  // cancelled now; while locked, cancel() only rejects and the stream stays open.
+  await body.cancel().catch(() => {});
+  if (!reply) throw new ServerError("The MCP response ended without a reply.");
+  return reply;
 }

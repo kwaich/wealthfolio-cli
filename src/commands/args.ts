@@ -12,7 +12,9 @@ export function today(now = new Date()): string {
 }
 
 export function dateArg(value: string): string {
-  if (!DATE.test(value) || Number.isNaN(Date.parse(value))) {
+  // Date.parse rolls 2026-02-30 over to March, so check that the date round-trips.
+  const parsed = DATE.test(value) ? new Date(`${value}T00:00:00Z`) : undefined;
+  if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw new InvalidArgumentError("Use YYYY-MM-DD.");
   }
   return value;

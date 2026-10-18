@@ -8,9 +8,8 @@ import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { globals, open, output } from "../context";
 import { UsageError } from "../errors";
-import { watchPortfolio, type WaitResult } from "../events";
 import { readStdin } from "../prompt";
-import { addWaitOptions, type WaitOptions } from "../wait";
+import { addWaitOptions, withWait, type WaitOptions } from "../wait";
 import { withMcp } from "./agent-token";
 import { collect } from "./args";
 
@@ -110,6 +109,7 @@ export function rowFromFlags(id: string, opts: UpdateOptions): Record<string, un
   }
   for (const name of opts.clear) {
     const field = clearField(name);
+    if (row[field] === null) continue; // `--clear fee --clear fee`
     if (row[field] !== undefined) {
       throw new UsageError(`${field} is both set and cleared.`);
     }
@@ -162,7 +162,13 @@ async function buildRows(
     rows = parseUpdates(opts.updates, "--updates");
   } else if (opts.updatesFile !== undefined) {
     const file = opts.updatesFile;
-    rows = parseUpdates(file === "-" ? await readStdin() : readFileSync(file, "utf8"), file);
+    let text: string;
+    try {
+      text = file === "-" ? await readStdin() : readFileSync(file, "utf8");
+    } catch (error) {
+      throw new UsageError(`Cannot read ${file}: ${(error as Error).message}`);
+    }
+    rows = parseUpdates(text, file);
   } else if (id) {
     rows = [rowFromFlags(id, opts)];
   } else {
@@ -263,26 +269,14 @@ export function registerActivityUpdate(activity: Command): void {
       return;
     }
 
-    // The watch opens before the write, so the job's events cannot be missed.
-    const watch = opts.wait ? await watchPortfolio() : undefined;
-    let commit: CommitOutput;
-    try {
-      commit = await withMcp(client, (mcp) =>
-        mcp.callTool<CommitOutput>("commit_activity_updates", { updates: rows }),
-      );
-    } catch (error) {
-      watch?.close();
-      throw error;
-    }
-    let wait: WaitResult | undefined;
-    if (watch) {
-      if (commit.updated.length > 0) {
-        wait = await watch.done(opts.waitTimeout * 1000);
-        if (wait.status !== "complete") process.exitCode = 1;
-      } else {
-        watch.close();
-      }
-    }
+    const { result: commit, wait } = await withWait(
+      opts,
+      () =>
+        withMcp(client, (mcp) =>
+          mcp.callTool<CommitOutput>("commit_activity_updates", { updates: rows }),
+        ),
+      (done) => done.updated.length > 0,
+    );
     output(
       sub,
       table ? commitTable(commit) : { dryRun: false, ...commit, ...(wait ? { wait } : {}) },

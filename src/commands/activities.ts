@@ -425,7 +425,11 @@ export function registerActivities(program: Command): void {
         return rows;
       };
       const writes = !opts.dryRun && planned.some((p) => p.ready);
-      const { result: rows, wait } = await withWait({ ...opts, wait: opts.wait && writes }, commit);
+      const { result: rows, wait } = await withWait(
+        { ...opts, wait: opts.wait && writes },
+        commit,
+        (done) => done.some((r) => r.status === "deleted"),
+      );
       const removed = rows
         .filter((r) => r.status === (opts.dryRun ? "ready" : "deleted"))
         .reduce((n, r) => n + (r.linkedActivity ? 2 : 1), 0);
@@ -480,6 +484,7 @@ export function registerActivities(program: Command): void {
         const { result: rows, wait } = await withWait(
           { ...opts, wait: opts.wait && writes },
           commit,
+          (done) => done.some((r) => r.status === "updated"),
         );
         finish(cmd, !!opts.dryRun, rows, undefined, wait);
       },

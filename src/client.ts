@@ -42,6 +42,8 @@ export interface OpenOptions {
   /** --url flag; wins over WF_URL and the config file. */
   url?: string;
   env?: NodeJS.ProcessEnv;
+  /** Config to use instead of the config file, for example one not saved yet. */
+  config?: Config;
 }
 
 export function resolveUrl(flag: string | undefined, env: NodeJS.ProcessEnv, config: Config) {
@@ -81,8 +83,7 @@ export class Client {
 
   profileId?: string;
 
-  static open({ url, env = process.env }: OpenOptions = {}): Client {
-    const config = loadConfig();
+  static open({ url, env = process.env, config = loadConfig() }: OpenOptions = {}): Client {
     return new Client(
       resolveUrl(url, env, config),
       config,

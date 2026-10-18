@@ -138,9 +138,13 @@ export async function watchPortfolio(): Promise<Watch> {
           timeoutMs,
         );
       });
-      const followed = follow();
-      // The abort below ends the read with an AbortError; nothing waits for it then.
-      followed.catch(() => {});
+      // The write has happened by now, so a broken stream is reported as the
+      // job's outcome instead of an error that would hide the write's result.
+      const followed = follow().catch((error: unknown): WaitResult => ({
+        status: "error",
+        seconds: Math.round((Date.now() - started) / 100) / 10,
+        error: error instanceof Error ? error.message : String(error),
+      }));
       try {
         return await Promise.race([followed, timeout]);
       } finally {

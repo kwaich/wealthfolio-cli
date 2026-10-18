@@ -77,9 +77,7 @@ export function buildProgram(): Command {
         const next: Config = { ...config };
         if (url) next.url = normalizeUrl(url);
         if (opts.profile) next.profile = opts.profile;
-        if (next.url !== config.url || next.profile !== config.profile) saveConfig(next);
-
-        const client = Client.open({ url });
+        const client = Client.open({ url, config: next });
         if (opts.token) {
           await client.loginWithToken(opts.token);
         } else {
@@ -100,6 +98,8 @@ export function buildProgram(): Command {
             client.clear();
           }
         }
+        // Saved only now, so a mistyped --url does not replace a working one.
+        if (next.url !== config.url || next.profile !== config.profile) saveConfig(next);
         const state = await client.ensureProfile();
         output(cmd, {
           url: client.url,

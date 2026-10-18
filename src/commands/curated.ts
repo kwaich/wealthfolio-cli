@@ -133,12 +133,17 @@ export function registerCurated(program: Command): void {
   spending
     .command("report")
     .description("Spending report for a date range (get_spending_report)")
-    .option("--from <date>", "start date, YYYY-MM-DD (default: first day of this month)", dateArg)
+    .option(
+      "--from <date>",
+      "start date, YYYY-MM-DD (default: first day of the --to month, so this month)",
+      dateArg,
+    )
     .option("--to <date>", "end date, YYYY-MM-DD (default: today)", dateArg)
     .option("--account <id>", "only this account; repeat for more", collect)
     .action(async (opts: { from?: string; to?: string; account?: string[] }, cmd: Command) => {
       const endDate = opts.to ?? today();
-      const startDate = opts.from ?? `${today().slice(0, 8)}01`;
+      // Without --from, report the month of --to; a past --to must not start after it.
+      const startDate = opts.from ?? `${endDate.slice(0, 8)}01`;
       if (startDate > endDate) throw new UsageError("--from must not be after --to.");
       const request = {
         startDate,

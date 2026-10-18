@@ -150,13 +150,25 @@ describe("wf spending report", () => {
     }
   });
 
-  it.each([[["--from", "2026-13-40"]], [["--from", "2026-05-01", "--to", "2026-04-01"]]])(
-    "exits 2 for bad dates %j",
-    async (args) => {
-      server();
-      expect((await run("spending", "report", ...args)).code).toBe(2);
-    },
-  );
+  it("starts at the first day of the --to month without --from", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 9, 18, 12) });
+    try {
+      const seen = server();
+      expect((await run("spending", "report", "--to", "2026-01-31")).code).toBe(0);
+      expect(seen[0]!.body).toEqual({ startDate: "2026-01-01", endDate: "2026-01-31" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [["--from", "2026-13-40"]],
+    [["--from", "2026-02-30"]],
+    [["--from", "2026-05-01", "--to", "2026-04-01"]],
+  ])("exits 2 for bad dates %j", async (args) => {
+    server();
+    expect((await run("spending", "report", ...args)).code).toBe(2);
+  });
 });
 
 describe("wf budget", () => {

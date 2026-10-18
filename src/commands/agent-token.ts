@@ -42,8 +42,12 @@ export function agentToken(client: Client): { token: string; profileId?: string 
 }
 
 /** Runs `fn` in one MCP session with this server. */
-export async function withMcp<T>(client: Client, fn: (mcp: McpClient) => Promise<T>): Promise<T> {
-  const { token, profileId } = agentToken(client);
+export async function withMcp<T>(
+  client: Client,
+  fn: (mcp: McpClient) => Promise<T>,
+  credentials: { token: string; profileId?: string } = agentToken(client),
+): Promise<T> {
+  const { token, profileId } = credentials;
   const mcp = await McpClient.connect({ baseUrl: client.url, token, profileId, version: VERSION });
   try {
     return await fn(mcp);
@@ -100,17 +104,32 @@ export function registerAgentToken(program: Command): void {
       // Check that /mcp is on and takes the token; keep the token either way.
       let mcp: { ok: boolean; error?: string; hint?: string } = { ok: true };
       try {
-        await withMcp(client, async () => {});
+        // The new token itself, not WF_AGENT_TOKEN, which would win in agentToken().
+        await withMcp(client, async () => {}, token);
       } catch (error) {
         if (!(error instanceof ServerError || error instanceof AuthError)) throw error;
         mcp = { ok: false, error: error.message, ...(error.hint ? { hint: error.hint } : {}) };
         process.exitCode = 1;
       }
       let replaced: string | undefined;
+      let notRevoked: string | undefined;
       if (old && old.url === client.url && old.profileId === client.profileId) {
         if (await revoke(client, old.id)) replaced = old.id;
+      } else if (old) {
+        // Only a session in the old token's profile and server can revoke it,
+        // and its secret is gone from disk now; say so instead of dropping it silently.
+        notRevoked = old.id;
+        process.stderr.write(
+          `warning: the previous token ${old.id} (${old.url}, profile ${old.profileId ?? "default"}) ` +
+            "was not revoked. Revoke it in the app under AI Agent Access.\n",
+        );
       }
-      output(sub, { ...describe(token), ...(replaced ? { replaced } : {}), mcp });
+      output(sub, {
+        ...describe(token),
+        ...(replaced ? { replaced } : {}),
+        ...(notRevoked ? { notRevoked } : {}),
+        mcp,
+      });
     });
 
   cmd
@@ -133,6 +152,14 @@ export function registerAgentToken(program: Command): void {
       // The token belongs to the server it was made on, whatever --url says now.
       const client = Client.open({ url: stored.url });
       await client.ensureProfile();
+      // revoke() looks only in the session's profile; from another one the token
+      // would look gone, and deleting the file would drop a live token's secret.
+      if (stored.profileId && client.profileId !== stored.profileId) {
+        throw new AuthError(
+          `The stored token belongs to profile ${stored.profileId}, not the current one.`,
+          `Run \`wf profile use ${stored.profileId}\`, then \`wf agent-token delete\` again.`,
+        );
+      }
       const revoked = await revoke(client, stored.id);
       clearAgentToken();
       output(sub, { deleted: true, revoked, id: stored.id });

@@ -1,8 +1,23 @@
 // Read commands for the data the MCP read tools return. The REST responses
 // already carry every field those tools add (tracking mode, provider, asset
-// id, local values, FX rate, ...), so these pass them through unchanged.
+// id, local values, FX rate, ...), so these pass them through unchanged,
+// except that holdings drop their classification tree unless asked (--full).
 import type { Command } from "commander";
 import { open, output } from "../context";
+
+interface Holding {
+  metadata?: unknown;
+  instrument?: { classifications?: unknown; notes?: unknown };
+}
+
+// The classification tree (sectors, regions, colours) is most of a holding's size.
+function slim(holding: Holding): Holding {
+  const copy = { ...holding, ...(holding.instrument && { instrument: { ...holding.instrument } }) };
+  delete copy.metadata;
+  delete copy.instrument?.classifications;
+  delete copy.instrument?.notes;
+  return copy;
+}
 
 export function registerReads(program: Command): void {
   program
@@ -21,16 +36,22 @@ export function registerReads(program: Command): void {
     .description("Holdings, cash included, for one account or all of them (get_holdings)")
     .option("--account <id>", "only this account")
     .option("--include-closed", "include closed positions (with --account)")
-    .action(async (opts: { account?: string; includeClosed?: boolean }, cmd: Command) => {
-      const filter = opts.account ? { type: "account", accountId: opts.account } : { type: "all" };
-      output(
-        cmd,
-        await open(cmd).invoke("get_holdings", {
+    .option(
+      "--full",
+      "also return each instrument's classifications and notes and the holding's metadata, which are left out by default",
+    )
+    .action(
+      async (opts: { account?: string; includeClosed?: boolean; full?: boolean }, cmd: Command) => {
+        const filter = opts.account
+          ? { type: "account", accountId: opts.account }
+          : { type: "all" };
+        const holdings = await open(cmd).invoke<Holding[]>("get_holdings", {
           filter,
           ...(opts.includeClosed ? { includeClosed: true } : {}),
-        }),
-      );
-    });
+        });
+        output(cmd, opts.full ? holdings : holdings.map(slim));
+      },
+    );
 
   program
     .command("health")

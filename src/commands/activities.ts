@@ -328,6 +328,25 @@ const ACTIVITY_TYPES = [
   "ADJUSTMENT",
 ];
 
+// What `activity search --brief` keeps; enough to read the list and to pick ids for a write.
+const BRIEF_FIELDS = [
+  "id",
+  "accountId",
+  "assetId",
+  "assetSymbol",
+  "activityType",
+  "subtype",
+  "status",
+  "date",
+  "quantity",
+  "unitPrice",
+  "amount",
+  "fee",
+  "currency",
+  "fxRate",
+  "needsReview",
+];
+
 export function registerActivities(program: Command): void {
   const activity = program
     .command("activity")
@@ -352,6 +371,7 @@ export function registerActivities(program: Command): void {
     )
     .option("--page <n>", "page, from 0", intArg, 0)
     .option("--page-size <n>", "rows per page", intArg, 50)
+    .option("--brief", "only the main fields of each row")
     .action(
       async (
         opts: {
@@ -365,6 +385,7 @@ export function registerActivities(program: Command): void {
           reviewed?: boolean;
           page: number;
           pageSize: number;
+          brief?: boolean;
         },
         cmd: Command,
       ) => {
@@ -385,6 +406,11 @@ export function registerActivities(program: Command): void {
           ...(review === undefined ? {} : { needsReviewFilter: review }),
           sort: { id: "date", desc: true },
         });
+        if (opts.brief) {
+          result.data = (result.data as Record<string, unknown>[]).map((row) =>
+            Object.fromEntries(BRIEF_FIELDS.map((f) => [f, row[f]])),
+          );
+        }
         // A table shows the rows; JSON keeps meta.totalRowCount for paging.
         output(cmd, globals(cmd).table ? result.data : result);
       },

@@ -61,7 +61,7 @@ wf status        # url, authenticated, serverVersion, profileId, warnings
 ```sh
 wf accounts                          # add --all for archived accounts
 wf holdings                          # all accounts; --account <id> for one
-wf activity search --from 2026-01-01 --type DIVIDEND --page-size 100
+wf activity search --from 2026-01-01 --type DIVIDEND --page-size 20 --brief
 wf activity search --needs-review    # the review queue
 wf activity search --id <id>         # one activity, with status and source
 wf health --refresh                  # data issues the app found
@@ -77,6 +77,26 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
   round them.
 - Dates are `YYYY-MM-DD` or RFC 3339.
 - Add `--table` only when the user asks for a table (rule 6).
+- `wf holdings` leaves out each instrument's classifications and notes and the
+  holding's metadata. Add `--full` only when you need sectors or regions. Even
+  slim, no `--account` returns the aggregate across all accounts (on one
+  portfolio, 26 rows were about 12k tokens), so pass `--account` when the question is about one
+  account. Pipe it through `jq` to the fields you need:
+
+  ```sh
+  wf holdings --account <id> | jq '[.[] | {symbol: .instrument.symbol,
+    quantity, price, value: .marketValue.base, cost: .costBasis.base,
+    gain: .totalGain.base, weight}]'
+  ```
+
+- `activity search` rows are around 1 KB each. Add `--brief` (less than half
+  that: `id`, `accountId`, `assetId`, `assetSymbol`, `activityType`, `subtype`,
+  `status`, `date`, `quantity`, `unitPrice`, `amount`, `fee`, `currency`, `fxRate`,
+  `needsReview`), and keep `--page-size` small unless the user wants the full
+  list. Leave `--brief` off when you need `comment`, `source*`, `tax` or `accountName`.
+- Use `wf commands --filter <word>`, never bare `wf commands` (it prints every command, around 12k tokens).
+- A holding's `fxRate` is the current rate; an activity's `fxRate` is the rate
+  it was recorded at.
 - `wf spending report` defaults to this month. It returns `current` and
   `prior` totals (`income`, `outflow`, `saved`, `net`) and breakdowns by
   category and day. `--account <id>` repeats.

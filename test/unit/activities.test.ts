@@ -310,6 +310,31 @@ describe("wf activity search", () => {
     mockFetch(() => json({ data: [] }));
     expect((await run("activity", "search", "--type", "GIFT")).code).toBe(2);
   });
+
+  it("--brief keeps the main fields and meta", async () => {
+    mockFetch(() =>
+      json({
+        data: [activity("a1", { assetSymbol: "BLOK", idempotencyKey: "k", accountName: "CMC" })],
+        meta: { totalRowCount: 1 },
+      }),
+    );
+    const out = (await run("activity", "search", "--brief")).json() as {
+      data: Record<string, unknown>[];
+      meta: unknown;
+    };
+    expect(out.meta).toEqual({ totalRowCount: 1 });
+    expect(out.data[0]).toEqual({
+      id: "a1",
+      accountId: "acc",
+      assetSymbol: "BLOK",
+      activityType: "DEPOSIT",
+      status: "POSTED",
+      date: "2026-01-05T00:00:00+00:00",
+      amount: "100",
+      currency: "USD",
+      needsReview: false,
+    });
+  });
 });
 
 describe("reads and health", () => {
@@ -325,6 +350,20 @@ describe("reads and health", () => {
     await run("holdings", "--account", "a1", "--include-closed");
     expect(seen[0]).toMatchObject({ method: "POST", body: { filter: { type: "all" } } });
     expect(seen[1]!.path).toBe("/api/v1/holdings?accountId=a1&includeClosed=true");
+  });
+
+  it("holdings drops classifications, notes and metadata unless --full", async () => {
+    const holding = {
+      id: "h1",
+      price: 10,
+      metadata: { profile: {} },
+      instrument: { symbol: "BLOK", notes: "n", classifications: { sectors: [] } },
+    };
+    mockFetch(() => json([holding]));
+    expect((await run("holdings")).json()).toEqual([
+      { id: "h1", price: 10, instrument: { symbol: "BLOK" } },
+    ]);
+    expect((await run("holdings", "--full")).json()).toEqual([holding]);
   });
 
   it("health reads the cached status", async () => {

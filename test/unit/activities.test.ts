@@ -439,7 +439,7 @@ describe("reads and health", () => {
     expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/health/status"]);
   });
 
-  it("health drops diagnostics and the web app's routes and payloads unless --full", async () => {
+  it("health drops diagnostics and the web app's routes unless --full, and keeps fixAction whole", async () => {
     const issue = {
       id: "i1",
       title: "No market data for 1 holding",
@@ -456,7 +456,7 @@ describe("reads and health", () => {
         {
           id: "i1",
           title: "No market data for 1 holding",
-          fixAction: { id: "sync_prices", label: "Sync Prices" },
+          fixAction: { id: "sync_prices", label: "Sync Prices", payload: ["s1"] },
           affectedItems: [{ id: "s1", name: "SAP", symbol: "SAP" }],
         },
       ],

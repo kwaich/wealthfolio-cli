@@ -71,7 +71,6 @@ export function briefHolding(h: Holding): Record<string, unknown> {
 interface Health {
   issues?: {
     diagnostics?: unknown;
-    fixAction?: { id: string; label: string; payload?: unknown };
     navigateAction?: unknown;
     params?: unknown;
     affectedItems?: { id: string; name: string; symbol?: string; route?: string }[];
@@ -80,16 +79,14 @@ interface Health {
 
 // diagnostics repeats each issue's details and affected items, entity by entity.
 // The other fields left out are for the web app: routes, translation keys and
-// params, cache keys, and the fix button's payload of asset ids, which
-// affectedItems also lists.
+// params, and cache keys. fixAction stays whole: execute_health_fix needs its payload.
 function slimHealth(health: Health): Health {
   return {
     ...health,
     issues: health.issues?.map((issue) => {
-      const { fixAction, affectedItems } = issue;
+      const { affectedItems } = issue;
       return {
         ...omit(issue, "diagnostics", "navigateAction", "params", "code", "dataHash", "timestamp"),
-        ...(fixAction && { fixAction: { id: fixAction.id, label: fixAction.label } }),
         ...(affectedItems && {
           affectedItems: affectedItems.map((item) => omit(item, "route")),
         }),

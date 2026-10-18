@@ -149,10 +149,13 @@ describe("wf call input handling", () => {
 });
 
 describe("wf commands", () => {
-  it("lists every command in the COMMANDS map with its payload hint", async () => {
-    const res = await run("commands");
+  it("lists only the names of the COMMANDS map without --filter", async () => {
+    expect((await run("commands")).json()).toEqual(Object.keys(COMMANDS));
+  });
+
+  it("gives method, path and payload hint with --filter", async () => {
+    const res = await run("commands", "--filter", "delete_activity");
     const rows = res.json() as { name: string; method: string; path: string; payload: string }[];
-    expect(rows.map((r) => r.name)).toEqual(Object.keys(COMMANDS));
     expect(rows.find((r) => r.name === "delete_activity")).toEqual({
       name: "delete_activity",
       method: "DELETE",

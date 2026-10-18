@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderTable } from "../../src/output";
+import { print, renderTable } from "../../src/output";
 import { json, mockFetch, run, useTempConfig } from "../helpers";
 
 useTempConfig();
@@ -46,6 +46,14 @@ describe("wf status", () => {
     const res = await run("status");
     expect(res.code).toBe(2);
     expect(res.stderr).toContain("wf login --url");
+  });
+});
+
+describe("json output", () => {
+  it("is one compact line", () => {
+    let out = "";
+    print({ a: [1, { b: null }] }, {}, (text) => (out += text));
+    expect(out).toBe('{"a":[1,{"b":null}]}\n');
   });
 });
 

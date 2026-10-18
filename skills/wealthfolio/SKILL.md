@@ -61,9 +61,9 @@ wf status        # url, authenticated, serverVersion, profileId, warnings
 ```sh
 wf accounts                          # add --all for archived accounts
 wf holdings                          # all accounts; --account <id> for one
-wf activity search --from 2026-01-01 --type DIVIDEND --page-size 20 --brief
+wf activity search --from 2026-01-01 --type DIVIDEND
 wf activity search --needs-review    # the review queue
-wf activity search --id <id>         # one activity, with status and source
+wf activity search --id <id> --full  # one activity, with every field, source included
 wf health --refresh                  # data issues the app found
 wf spending report --from 2026-09-01 --to 2026-09-30
 wf budget --period 2026-09
@@ -89,12 +89,13 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
     gain: .totalGain.base, weight}]'
   ```
 
-- `activity search` rows are around 1 KB each. Add `--brief` (less than half
-  that: `id`, `accountId`, `assetId`, `assetSymbol`, `activityType`, `subtype`,
-  `status`, `date`, `quantity`, `unitPrice`, `amount`, `fee`, `currency`, `fxRate`,
-  `needsReview`), and keep `--page-size` small unless the user wants the full
-  list. Leave `--brief` off when you need `comment`, `source*`, `tax` or `accountName`.
-- Use `wf commands --filter <word>`, never bare `wf commands` (it prints every command, around 12k tokens).
+- `activity search` returns 20 rows by default, each with only `id`, `accountId`,
+  `assetId`, `assetSymbol`, `activityType`, `subtype`, `status`, `date`,
+  `quantity`, `unitPrice`, `amount`, `fee`, `currency`, `fxRate` and
+  `needsReview`. Raise `--page-size` only when the user wants more. Add
+  `--full` when you need `comment`, `source*`, `tax` or `accountName`; full rows
+  are around 1 KB each.
+- `wf commands` lists names only. Add `--filter <word>` for method, path and payload.
 - A holding's `fxRate` is the current rate; an activity's `fxRate` is the rate
   it was recorded at.
 - `wf spending report` defaults to this month. It returns `current` and
@@ -103,6 +104,8 @@ wf rebalance --cash 5000             # plus a plan to invest 5000
 - `wf budget` returns `state` (groups, targets) and `computed` (`totals`,
   per-group rows). All zeros with empty `groupRows` means no budget is set up
   for that month; say so instead of reporting zero spending.
+- `wf health` leaves out each issue's `diagnostics` (it repeats `details` and
+  `affectedItems`). Add `--full` only if those don't explain an issue.
 - `wf holdings --account <id> --include-closed` also lists sold-out positions.
 
 For anything without its own command:

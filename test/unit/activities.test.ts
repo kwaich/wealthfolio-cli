@@ -311,14 +311,20 @@ describe("wf activity search", () => {
     expect((await run("activity", "search", "--type", "GIFT")).code).toBe(2);
   });
 
-  it("--brief keeps the main fields and meta", async () => {
+  it("asks for 20 rows by default", async () => {
+    const seen = mockFetch(() => json({ data: [], meta: {} }));
+    await run("activity", "search");
+    expect((seen[0]!.body as Record<string, unknown>).pageSize).toBe(20);
+  });
+
+  it("keeps the main fields and meta", async () => {
     mockFetch(() =>
       json({
         data: [activity("a1", { assetSymbol: "BLOK", idempotencyKey: "k", accountName: "CMC" })],
         meta: { totalRowCount: 1 },
       }),
     );
-    const out = (await run("activity", "search", "--brief")).json() as {
+    const out = (await run("activity", "search")).json() as {
       data: Record<string, unknown>[];
       meta: unknown;
     };
@@ -334,6 +340,16 @@ describe("wf activity search", () => {
       currency: "USD",
       needsReview: false,
     });
+  });
+
+  it("--full returns every field", async () => {
+    mockFetch(() =>
+      json({ data: [activity("a1", { idempotencyKey: "k" })], meta: { totalRowCount: 1 } }),
+    );
+    const out = (await run("activity", "search", "--full")).json() as {
+      data: Record<string, unknown>[];
+    };
+    expect(out.data[0]).toMatchObject({ id: "a1", idempotencyKey: "k", comment: "note" });
   });
 });
 
@@ -370,6 +386,19 @@ describe("reads and health", () => {
     const seen = mockFetch(() => json({ overallSeverity: "INFO", issues: [] }));
     await run("health");
     expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/health/status"]);
+  });
+
+  it("health drops each issue's diagnostics unless --full", async () => {
+    const issue = { id: "i1", title: "Cash went below zero", diagnostics: [{ code: "X" }] };
+    mockFetch(() => json({ overallSeverity: "WARNING", issues: [issue] }));
+    expect((await run("health")).json()).toEqual({
+      overallSeverity: "WARNING",
+      issues: [{ id: "i1", title: "Cash went below zero" }],
+    });
+    expect((await run("health", "--full")).json()).toEqual({
+      overallSeverity: "WARNING",
+      issues: [issue],
+    });
   });
 
   it("health --refresh runs the checks in the app's configured timezone", async () => {

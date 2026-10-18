@@ -1,7 +1,8 @@
 // Read commands for the data the MCP read tools return. The REST responses
 // already carry every field those tools add (tracking mode, provider, asset
 // id, local values, FX rate, ...), so these pass them through unchanged,
-// except that holdings drop their classification tree unless asked (--full).
+// except that holdings drop their classification tree and health its
+// per-entity diagnostics unless asked (--full).
 import type { Command } from "commander";
 import { open, output } from "../context";
 
@@ -17,6 +18,15 @@ function slim(holding: Holding): Holding {
   delete copy.instrument?.classifications;
   delete copy.instrument?.notes;
   return copy;
+}
+
+interface Health {
+  issues?: { diagnostics?: unknown }[];
+}
+
+// diagnostics repeats each issue's details and affected items, entity by entity.
+function slimHealth(health: Health): Health {
+  return { ...health, issues: health.issues?.map((i) => ({ ...i, diagnostics: undefined })) };
 }
 
 export function registerReads(program: Command): void {
@@ -57,19 +67,23 @@ export function registerReads(program: Command): void {
     .command("health")
     .description("Health Center status (get_health_status); --refresh runs the checks first")
     .option("--refresh", "run the full checks first (run_health_checks)")
-    .action(async (opts: { refresh?: boolean }, cmd: Command) => {
+    .option("--full", "also return each issue's diagnostics, which are left out by default")
+    .action(async (opts: { refresh?: boolean; full?: boolean }, cmd: Command) => {
       const client = open(cmd);
+      const show = (health: Health) => output(cmd, opts.full ? health : slimHealth(health));
       if (!opts.refresh) {
-        output(cmd, await client.invoke("get_health_status"));
+        show(await client.invoke<Health>("get_health_status"));
         return;
       }
       // As the MCP tool: check in the timezone configured in the app, not the
       // machine's. Without one, the vendored invoke sends the local timezone.
       const settings = await client.invoke<{ timezone?: string }>("get_settings");
       const timezone = settings?.timezone?.trim();
-      output(
-        cmd,
-        await client.invoke("run_health_checks", timezone ? { clientTimezone: timezone } : {}),
+      show(
+        await client.invoke<Health>(
+          "run_health_checks",
+          timezone ? { clientTimezone: timezone } : {},
+        ),
       );
     });
 }

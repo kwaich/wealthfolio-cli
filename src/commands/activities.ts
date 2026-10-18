@@ -328,7 +328,7 @@ const ACTIVITY_TYPES = [
   "ADJUSTMENT",
 ];
 
-// What `activity search --brief` keeps; enough to read the list and to pick ids for a write.
+// What `activity search` keeps unless --full; enough to read the list and to pick ids for a write.
 const BRIEF_FIELDS = [
   "id",
   "accountId",
@@ -370,8 +370,8 @@ export function registerActivities(program: Command): void {
       new Option("--reviewed", "only activities not waiting for review").conflicts("needsReview"),
     )
     .option("--page <n>", "page, from 0", intArg, 0)
-    .option("--page-size <n>", "rows per page", intArg, 50)
-    .option("--brief", "only the main fields of each row")
+    .option("--page-size <n>", "rows per page", intArg, 20)
+    .option("--full", "return every field of each row, not only the main ones")
     .action(
       async (
         opts: {
@@ -385,7 +385,7 @@ export function registerActivities(program: Command): void {
           reviewed?: boolean;
           page: number;
           pageSize: number;
-          brief?: boolean;
+          full?: boolean;
         },
         cmd: Command,
       ) => {
@@ -406,7 +406,7 @@ export function registerActivities(program: Command): void {
           ...(review === undefined ? {} : { needsReviewFilter: review }),
           sort: { id: "date", desc: true },
         });
-        if (opts.brief) {
+        if (!opts.full) {
           result.data = (result.data as Record<string, unknown>[]).map((row) =>
             Object.fromEntries(BRIEF_FIELDS.map((f) => [f, row[f]])),
           );

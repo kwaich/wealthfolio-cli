@@ -359,7 +359,9 @@ scripts/vendor.sh v3.11.0           # copies files, rewrites UPSTREAM_TAG and sr
 `core.ts` diff. For it to open PRs, enable _Settings → Actions → General →
 Allow GitHub Actions to create and approve pull requests_. PRs opened by the
 workflow token do not start CI on their own; push a commit or re-run CI on the
-PR before merging.
+PR before merging. When `core.ts` is unchanged and every check passed, the
+workflow starts CI itself and sets the PR to auto-merge, which needs _Settings
+→ General → Pull Requests → Allow auto-merge_.
 
 ### Releasing
 

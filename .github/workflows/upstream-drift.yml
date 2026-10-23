@@ -2,7 +2,8 @@ name: Upstream drift
 
 # Weekly: if upstream Wealthfolio has a newer release than UPSTREAM_TAG,
 # re-vendor the web adapter contract, run every check against the new server
-# image, and open a PR with the core.ts diff.
+# image, and open a PR with the core.ts diff. If core.ts is unchanged and every
+# check passed, it also starts CI and sets the PR to auto-merge.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -13,6 +14,7 @@ on:
         required: false
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -126,4 +128,10 @@ jobs:
             echo
             echo "Review new or changed cases in the invoke switch against the curated commands in src/commands/curated.ts."
           } > "$RUNNER_TEMP/body.md"
-          gh pr create --title "Vendor upstream $latest" --body-file "$RUNNER_TEMP/body.md" --head "$branch"
+          pr="$(gh pr create --title "Vendor upstream $latest" --body-file "$RUNNER_TEMP/body.md" --head "$branch")"
+          # Unchanged core.ts and green checks: the contract is the same, so merge once CI passes.
+          # CI is dispatched because PRs opened with the workflow token do not start it.
+          if [ "${{ steps.checks.outcome }}" = success ] && [ ! -s "$RUNNER_TEMP/core.diff" ]; then
+            gh workflow run ci.yml --ref "$branch"
+            gh pr merge "$pr" --auto --merge
+          fi

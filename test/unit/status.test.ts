@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UPSTREAM_TAG } from "../../src/contract";
 import { print, renderTable } from "../../src/output";
 import { json, mockFetch, run, useTempConfig } from "../helpers";
 
@@ -16,21 +17,21 @@ function server(version: string) {
 
 describe("wf status", () => {
   it("reports no warning when the server matches UPSTREAM_TAG", async () => {
-    server("3.10.0");
+    server(UPSTREAM_TAG.slice(1));
     const res = await run("status");
     expect(res.code).toBe(0);
     expect(res.json()).toMatchObject({
-      serverVersion: "3.10.0",
-      upstreamTag: "v3.10.0",
+      serverVersion: UPSTREAM_TAG.slice(1),
+      upstreamTag: UPSTREAM_TAG,
       warnings: [],
     });
     expect(res.stderr).toBe("");
   });
 
   it("warns when the server version differs from UPSTREAM_TAG", async () => {
-    server("3.11.0");
+    server("0.0.1");
     const res = await run("status");
-    expect(res.stderr).toContain("differs from the vendored contract v3.10.0");
+    expect(res.stderr).toContain(`differs from the vendored contract ${UPSTREAM_TAG}`);
     expect((res.json() as { warnings: string[] }).warnings).toHaveLength(1);
   });
 

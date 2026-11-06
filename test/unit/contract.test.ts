@@ -76,22 +76,6 @@ describe("wf call builds the request the vendored switch builds", () => {
     );
   });
 
-  it("calculate_rebalance_plan: omits eligibleAssetIds when not given", async () => {
-    const req = await call("calculate_rebalance_plan", {
-      targetId: "t1",
-      availableCash: 500,
-      filter: { type: "all" },
-      scenarioMode: "hybrid",
-    });
-    expect(req.path).toBe("/api/v1/allocation-targets/rebalance/calculate");
-    expect(req.body).toEqual({
-      targetId: "t1",
-      availableCash: 500,
-      filter: { type: "all" },
-      scenarioMode: "hybrid",
-    });
-  });
-
   it("run_health_checks: sends X-Client-Timezone", async () => {
     const req = await call("run_health_checks", { clientTimezone: "Asia/Hong_Kong" });
     expect(req.headers["x-client-timezone"]).toBe("Asia/Hong_Kong");

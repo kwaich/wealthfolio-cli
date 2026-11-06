@@ -68,7 +68,7 @@ wf health --refresh                  # data issues the app found
 wf spending report --from 2026-09-01 --to 2026-09-30
 wf budget --period 2026-09
 wf rebalance --holdings              # drift against the allocation target
-wf rebalance --cash 5000             # plus a plan to invest 5000
+wf rebalance --cash 5000             # plus a plan to invest 5000 of new money; add --account <id> unless the target is one account
 ```
 
 - `activity search` returns `{data, meta}`. `meta.totalRowCount` says whether

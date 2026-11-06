@@ -251,6 +251,41 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
     expect(rebalance.stderr).toContain("No active allocation targets");
   });
 
+  it("plans new money for an allocation target", async () => {
+    const saved = await call<{ target: { id: string } }>("save_allocation_target_with_weights", {
+      id: null,
+      input: {
+        name: "wf integration",
+        scopeType: "account",
+        scopeId: accountId,
+        taxonomyId: "asset_classes",
+        triggerType: "manual",
+        driftBandBps: 500,
+      },
+      weights: [
+        { categoryId: "EQUITY", targetBps: 6000, isLocked: false, isRequired: false },
+        { categoryId: "FIXED_INCOME", targetBps: 4000, isLocked: false, isRequired: false },
+      ],
+    });
+    try {
+      // No securities are held, so all the cash stays unspent; the server accepts the request.
+      expect(await wfJson("rebalance", "--cash", "500")).toMatchObject({
+        plan: { mode: "invest_cash", adjustments: [], remainingCash: 500 },
+      });
+      // New targets do not allow sells, which `rebalance` mode needs.
+      const sells = await wf(["rebalance", "--cash", "500", "--mode", "rebalance"]);
+      expect(sells.code).toBe(1);
+      expect(sells.stderr).toContain("disables reductions");
+    } finally {
+      await wf([
+        "call",
+        "delete_allocation_target",
+        "--args",
+        JSON.stringify({ id: saved.target.id }),
+      ]);
+    }
+  });
+
   it("guards against a missing id", async () => {
     const res = await wf(["call", "delete_account", "--args", "{}"]);
     expect(res.code).toBe(2);

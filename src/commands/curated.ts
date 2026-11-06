@@ -74,14 +74,22 @@ export function registerCurated(program: Command): void {
     .command("rebalance")
     .description(
       "Show drift against an allocation target; with --cash, also a rebalance plan " +
-        "(get_allocation_target_drift, calculate_rebalance_plan)",
+        "(get_allocation_target_drift, generate_calculated_adjustments)",
     )
     .option("--target <id>", "allocation target id or name (default: the only active target)")
-    .option("--cash <amount>", "cash to invest; computes a rebalance plan", numberArg)
+    .option(
+      "--cash <amount>",
+      "new money to invest, not yet recorded; computes a rebalance plan",
+      numberArg,
+    )
+    .option(
+      "--account <id>",
+      "account the new money arrives in (default: the target's account, if it has one)",
+    )
     .addOption(
       new Option("--mode <mode>", "plan scenario")
-        .choices(["cash_flow_only", "sell_to_rebalance", "hybrid"])
-        .default("cash_flow_only"),
+        .choices(["invest_cash", "rebalance"])
+        .default("invest_cash"),
     )
     .option("--asset <id>", "limit the plan to this asset; repeat for more", collect)
     .option("--holdings", "include holdings in the drift report")
@@ -91,6 +99,7 @@ export function registerCurated(program: Command): void {
         opts: {
           target?: string;
           cash?: number;
+          account?: string;
           mode: string;
           asset?: string[];
           holdings?: boolean;
@@ -127,11 +136,18 @@ export function registerCurated(program: Command): void {
           drift: opts.full ? drift : withoutColours(drift),
         };
         if (opts.cash !== undefined) {
-          result.plan = await client.invoke("calculate_rebalance_plan", {
+          const accountId =
+            opts.account ?? (filter.type === "account" ? filter.accountId : undefined);
+          if (!accountId) {
+            throw new UsageError("--cash needs the account the money arrives in. Pass --account.");
+          }
+          result.plan = await client.invoke("generate_calculated_adjustments", {
             targetId: target!.id,
-            availableCash: opts.cash,
+            mode: opts.mode,
+            rule: "current_holding_proportions",
+            cash: { trackedCashToUse: 0, externalContribution: { [accountId]: opts.cash } },
+            selectedAccountIds: [accountId],
             filter,
-            scenarioMode: opts.mode,
             // Upstream sorts and dedupes the ids before sending.
             ...(opts.asset ? { eligibleAssetIds: [...new Set(opts.asset)].sort() } : {}),
           });

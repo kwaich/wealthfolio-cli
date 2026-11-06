@@ -73,7 +73,7 @@ describe("wf rebalance", () => {
       "--cash",
       "1500.5",
       "--mode",
-      "hybrid",
+      "rebalance",
       "--asset",
       "b",
       "--asset",
@@ -83,15 +83,26 @@ describe("wf rebalance", () => {
     );
     expect(seen[2]).toMatchObject({
       method: "POST",
-      path: "/api/v1/allocation-targets/rebalance/calculate",
+      path: "/api/v1/allocation-targets/worksheet/generate",
       body: {
         targetId: "t1",
-        availableCash: 1500.5,
+        mode: "rebalance",
+        rule: "current_holding_proportions",
+        cash: { trackedCashToUse: 0, externalContribution: { "acc-1": 1500.5 } },
+        selectedAccountIds: ["acc-1"],
         filter: { type: "account", accountId: "acc-1" },
-        scenarioMode: "hybrid",
         eligibleAssetIds: ["a", "b"],
       },
     });
+  });
+
+  it("exits 2 for --cash when the target has no account and --account is missing", async () => {
+    server({
+      "GET /api/v1/allocation-targets": [{ id: "t2", name: "All", scopeType: "all" }],
+    });
+    const res = await run("rebalance", "--cash", "100");
+    expect(res.code).toBe(2);
+    expect(res.stderr).toContain("--account");
   });
 
   it("drops category colours unless --full", async () => {

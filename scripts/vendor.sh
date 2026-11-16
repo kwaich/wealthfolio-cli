@@ -14,12 +14,15 @@ REPO="${UPSTREAM_REPO:-https://github.com/wealthfolio/wealthfolio}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="apps/frontend/src/adapters"
 # Upstream files copied verbatim. Paths are relative to $SRC_DIR.
-FILES=("web/core.ts" "invoke-timeout.ts")
+FILES=("web/core.ts" "web/export-options.ts" "invoke-timeout.ts")
 # The only imports core.ts may have. A new import needs a new shim.
 EXPECTED_IMPORTS='"@/features/profiles/session"
 "@/lib/auth-token"
+"@/lib/backend-error"
+"@/lib/types"
 "../invoke-timeout"
-"../types"'
+"../types"
+"./export-options"'
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

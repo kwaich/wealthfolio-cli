@@ -220,6 +220,12 @@ account; it can't be undone.
   the server names the field. Run `wf schema <command>`, add the field, and
   try once more. `wf schema` shows the types the web app sends. The server
   can require more than they show.
+- **Exit 1 with a generic message**, such as "Check your input and try
+  again." or "The operation could not be completed.": the server refused but
+  doesn't say why. Check the payload against `wf schema <command>` once. If it
+  matches, stop and tell the user what you sent. The cause is usually server
+  state, not the payload: `wf rebalance --mode rebalance`, for example, fails
+  this way when the target doesn't allow sells.
 - **Exit 2 with "Refusing to send ... a required payload key is missing"**:
   an id in the payload is missing or misspelled.
 - **`wait.status` is `error` or `timeout`**: the write happened, but the

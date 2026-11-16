@@ -1,9 +1,0 @@
-{
-  "repo": "https://github.com/wealthfolio/wealthfolio",
-  "tag": "v3.12.0",
-  "commit": "f217ef5fbe76eecb5c5ceac53ee2514dee706c81",
-  "files": {
-    "apps/frontend/src/adapters/web/core.ts": "a7b7ca45b9b80aa5ad6dbfdd376d4509d992107eb8513c5e72509229a319c02b",
-    "apps/frontend/src/adapters/invoke-timeout.ts": "90907b8f011dbc408b13f359df9dd1bceb106a2b5ba659771ef2a66477415072"
-  }
-}

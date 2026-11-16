@@ -272,10 +272,11 @@ describe.skipIf(!URL || !PASSWORD)("against a live server", () => {
       expect(await wfJson("rebalance", "--cash", "500")).toMatchObject({
         plan: { mode: "invest_cash", adjustments: [], remainingCash: 500 },
       });
-      // New targets do not allow sells, which `rebalance` mode needs.
+      // New targets do not allow sells, which `rebalance` mode needs. Since
+      // v3.13.0 the server answers with a generic message, not the reason.
       const sells = await wf(["rebalance", "--cash", "500", "--mode", "rebalance"]);
       expect(sells.code).toBe(1);
-      expect(sells.stderr).toContain("disables reductions");
+      expect(sells.stderr).toContain("Check your input and try again.");
     } finally {
       await wf([
         "call",

@@ -23,16 +23,24 @@ export async function profileFetch(
     if (text.startsWith("PROFILE_")) throw new AuthError(text, PROFILE_HINT);
     throw new ServerError(text || "Profile unavailable", 423);
   }
-  // Request-body rejections (422 "missing field `accountType`") and some
-  // other errors are plain text. The vendored invoke reads only JSON error
-  // bodies and would report the status text instead. 401 stays with invoke.
-  if (!response.ok && response.status !== 401 && !isJson(response)) {
+  // The vendored invoke reduces an error to a code (see shims/backend-error)
+  // and reads only JSON bodies, while request-body rejections (422 "missing
+  // field `accountType`") are plain text. Report the server's own message for
+  // both. 401 stays with invoke.
+  if (!response.ok && response.status !== 401) {
     const text = (await response.text()).trim();
-    throw new ServerError(text || response.statusText, response.status);
+    throw new ServerError(errorMessage(text) || response.statusText, response.status);
   }
   return response;
 }
 
-function isJson(response: Response): boolean {
-  return response.headers.get("content-type")?.includes("json") ?? false;
+function errorMessage(text: string): string {
+  try {
+    const body = JSON.parse(text) as { message?: unknown; errorCode?: unknown };
+    if (typeof body.message === "string") return body.message;
+    if (typeof body.errorCode === "string") return body.errorCode;
+  } catch {
+    // plain-text error body
+  }
+  return text;
 }

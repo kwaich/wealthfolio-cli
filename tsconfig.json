@@ -16,7 +16,9 @@
     "baseUrl": ".",
     "paths": {
       "@/features/profiles/session": ["./src/shims/session.ts"],
-      "@/lib/auth-token": ["./src/shims/auth-token.ts"]
+      "@/lib/auth-token": ["./src/shims/auth-token.ts"],
+      "@/lib/backend-error": ["./src/shims/backend-error.ts"],
+      "@/lib/types": ["./src/shims/types.ts"]
     }
   },
   "include": ["src", "test", "vendor", "*.config.ts"]

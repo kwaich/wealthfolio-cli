@@ -358,12 +358,13 @@ scripts/vendor.sh v3.11.0           # copies files, copies config/timeouts.json,
 `vendor.sh` stops if `core.ts` imports a module that has no shim yet. The
 `Upstream drift` workflow does this weekly: it re-vendors, runs every check
 (the integration test runs against the new image), and opens a PR with the
-`core.ts` diff. For it to open PRs, enable _Settings → Actions → General →
-Allow GitHub Actions to create and approve pull requests_. PRs opened by the
-workflow token do not start CI on their own; push a commit or re-run CI on the
-PR before merging. When `core.ts` is unchanged and every check passed, the
-workflow starts CI itself and sets the PR to auto-merge, which needs _Settings
-→ General → Pull Requests → Allow auto-merge_.
+`core.ts` and timeout policy (`invoke-timeout.ts`, `config/timeouts.json`)
+diffs. For it to open PRs, enable _Settings → Actions → General → Allow GitHub
+Actions to create and approve pull requests_. PRs opened by the workflow token
+do not start CI on their own; push a commit or re-run CI on the PR before
+merging. When `core.ts` and the timeout policy are unchanged and every check
+passed, the workflow starts CI itself and sets the PR to auto-merge, which
+needs _Settings → General → Pull Requests → Allow auto-merge_.
 
 ### Releasing
 

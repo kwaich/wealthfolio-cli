@@ -2,8 +2,9 @@ name: Upstream drift
 
 # Weekly: if upstream Wealthfolio has a newer release than UPSTREAM_TAG,
 # re-vendor the web adapter contract, run every check against the new server
-# image, and open a PR with the core.ts diff. If core.ts is unchanged and every
-# check passed, it also starts CI and sets the PR to auto-merge.
+# image, and open a PR with the core.ts and timeout policy diffs. If neither
+# changed and every check passed, it also starts CI and sets the PR to
+# auto-merge.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -66,10 +67,18 @@ jobs:
         run: |
           old="vendor/upstream/${{ steps.tag.outputs.current }}/adapters/web/core.ts"
           cp "$old" "$RUNNER_TEMP/core.old.ts"
+          cp "vendor/upstream/${{ steps.tag.outputs.current }}/adapters/invoke-timeout.ts" "$RUNNER_TEMP/invoke-timeout.old.ts"
+          cp config/timeouts.json "$RUNNER_TEMP/timeouts.old.json" 2>/dev/null || : > "$RUNNER_TEMP/timeouts.old.json"
           scripts/vendor.sh "${{ steps.tag.outputs.latest }}"
           new="vendor/upstream/${{ steps.tag.outputs.latest }}/adapters/web/core.ts"
           diff -u --label "core.ts ${{ steps.tag.outputs.current }}" --label "core.ts ${{ steps.tag.outputs.latest }}" \
             "$RUNNER_TEMP/core.old.ts" "$new" > "$RUNNER_TEMP/core.diff" || true
+          {
+            diff -u --label "invoke-timeout.ts ${{ steps.tag.outputs.current }}" --label "invoke-timeout.ts ${{ steps.tag.outputs.latest }}" \
+              "$RUNNER_TEMP/invoke-timeout.old.ts" "vendor/upstream/${{ steps.tag.outputs.latest }}/adapters/invoke-timeout.ts"
+            diff -u --label "config/timeouts.json ${{ steps.tag.outputs.current }}" --label "config/timeouts.json ${{ steps.tag.outputs.latest }}" \
+              "$RUNNER_TEMP/timeouts.old.json" config/timeouts.json
+          } > "$RUNNER_TEMP/timeouts.diff" || true
 
       - name: Checks
         id: checks
@@ -126,12 +135,19 @@ jobs:
             [ "$(wc -c < "$RUNNER_TEMP/core.diff")" -gt 50000 ] && echo "... (truncated; see the Files tab)"
             echo '```'
             echo
+            echo "## Timeout policy diff (invoke-timeout.ts, config/timeouts.json)"
+            echo
+            echo '```diff'
+            head -c 20000 "$RUNNER_TEMP/timeouts.diff"
+            [ "$(wc -c < "$RUNNER_TEMP/timeouts.diff")" -gt 20000 ] && echo "... (truncated; see the Files tab)"
+            echo '```'
+            echo
             echo "Review new or changed cases in the invoke switch against the curated commands in src/commands/curated.ts."
           } > "$RUNNER_TEMP/body.md"
           pr="$(gh pr create --title "Vendor upstream $latest" --body-file "$RUNNER_TEMP/body.md" --head "$branch")"
-          # Unchanged core.ts and green checks: the contract is the same, so merge once CI passes.
+          # Unchanged core.ts and timeout policy, and green checks: the contract is the same, so merge once CI passes.
           # CI is dispatched because PRs opened with the workflow token do not start it.
-          if [ "${{ steps.checks.outcome }}" = success ] && [ ! -s "$RUNNER_TEMP/core.diff" ]; then
+          if [ "${{ steps.checks.outcome }}" = success ] && [ ! -s "$RUNNER_TEMP/core.diff" ] && [ ! -s "$RUNNER_TEMP/timeouts.diff" ]; then
             gh workflow run ci.yml --ref "$branch"
             gh pr merge "$pr" --auto --merge
           fi

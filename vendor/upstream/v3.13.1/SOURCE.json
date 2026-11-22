@@ -5,6 +5,7 @@
   "files": {
     "apps/frontend/src/adapters/web/core.ts": "cdf601af6b9e6b2dbce22f14cdc7c650537c72f82861fe2e6b647e965a90e476",
     "apps/frontend/src/adapters/web/export-options.ts": "80c09774cc61f62f6a23af59c113bef3f7eb83ad264524dcd86141abc1f057df",
-    "apps/frontend/src/adapters/invoke-timeout.ts": "9f5ca0370044d038f4e97c945532ef1bbcd6f0c101cb4411305e9d2194b09f71"
+    "apps/frontend/src/adapters/invoke-timeout.ts": "9f5ca0370044d038f4e97c945532ef1bbcd6f0c101cb4411305e9d2194b09f71",
+    "config/timeouts.json": "f5dc39b1cc84f21e78c35727f071cb3e3728322587a313903a1a7df4c8da80c8"
   }
 }

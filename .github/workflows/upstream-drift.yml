@@ -107,7 +107,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add -A vendor src/contract.ts UPSTREAM_TAG
+          git add -A vendor config src/contract.ts UPSTREAM_TAG
           git commit -m "chore: vendor upstream $latest"
           git push origin "$branch"
           {

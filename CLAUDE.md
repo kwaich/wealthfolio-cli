@@ -33,11 +33,11 @@ scripts/bench-seed.sh           # once per server; WF_TEST_PROXY=1 on test-serve
 scripts/bench.sh main           # Markdown table: main vs dist/wf.js
 ```
 
-CI also fails if `vendor/`, `src/contract.ts` or `UPSTREAM_TAG` differ from what is committed (`git diff --exit-code`).
+CI also fails if `vendor/`, `config/`, `src/contract.ts` or `UPSTREAM_TAG` differ from what is committed (`git diff --exit-code`).
 
 ## Architecture
 
-**The vendored contract.** `vendor/upstream/<tag>/adapters/web/core.ts` is upstream's web adapter: a `COMMANDS` map (command name -> method and path) and an `invoke(command, payload)` switch that builds each request. Never edit files in `vendor/`, `src/contract.ts` or `UPSTREAM_TAG` by hand. `scripts/vendor.sh <tag>` regenerates them, and a unit test checks the files against the hashes in `SOURCE.json`. `src/contract.ts` re-exports `COMMANDS`, `invoke`, `PAYLOADS` and `SCHEMAS` from the current tag. To fix how the CLI uses the contract, change the CLI code or the shims, never the vendored code.
+**The vendored contract.** `vendor/upstream/<tag>/adapters/web/core.ts` is upstream's web adapter: a `COMMANDS` map (command name -> method and path) and an `invoke(command, payload)` switch that builds each request. Never edit files in `vendor/`, `config/`, `src/contract.ts` or `UPSTREAM_TAG` by hand. (`config/timeouts.json` is upstream's timeout policy, which the vendored `invoke-timeout.ts` imports by relative path.) `scripts/vendor.sh <tag>` regenerates them, and a unit test checks the files against the hashes in `SOURCE.json`. `src/contract.ts` re-exports `COMMANDS`, `invoke`, `PAYLOADS` and `SCHEMAS` from the current tag. To fix how the CLI uses the contract, change the CLI code or the shims, never the vendored code.
 
 **Shims replace upstream's browser imports.** `core.ts` imports `@/features/profiles/session` and `@/lib/auth-token`. These resolve to `src/shims/*`, and the aliases are in two places that must stay in sync: `tsconfig.json` `paths` (for `tsc`) and `shims.config.ts` (for tsup and vitest). `vendor.sh` stops if `core.ts` gets a new import; that needs a new shim in both places and an update to `EXPECTED_IMPORTS` in the script. The `profileFetch` shim sends every request through `src/transport.ts`.
 

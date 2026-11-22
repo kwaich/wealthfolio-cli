@@ -111,7 +111,7 @@
   "get_allocation_target": "{ id: string }",
   "get_allocation_target_drift": "{ targetId: string; filter: unknown; includeHoldings?: boolean }",
   "get_alternative_holdings": "none",
-  "get_asset_holdings": "{ assetId: string }",
+  "get_asset_holdings": "{ assetId: string; filter?: unknown }",
   "get_asset_logo": "{ assetId: string }",
   "get_asset_lots": "{ assetId: string; includeSnapshotPositions?: boolean }",
   "get_asset_profile": "{ assetId: string }",

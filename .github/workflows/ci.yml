@@ -27,7 +27,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - name: Vendored files are unedited
-        run: git diff --exit-code -- vendor src/contract.ts UPSTREAM_TAG
+        run: git diff --exit-code -- vendor config src/contract.ts UPSTREAM_TAG
       - run: pnpm test
       - run: pnpm build
       - run: node dist/wf.js --version

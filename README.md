@@ -305,8 +305,10 @@ endpoint. It sends the agent token and the `x-wf-profile-id` header, and
 reads the JSON-RPC reply from the SSE response.
 
 `vendor/upstream/<tag>/SOURCE.json` holds the upstream commit and file hashes;
-a test fails if a vendored file is edited. `payloads.json` is extracted from the
-switch by `scripts/extract-payloads.mjs`. `schemas.json` comes from
+a test fails if a vendored file is edited. `config/timeouts.json` is also copied
+from upstream, because the vendored `invoke-timeout.ts` imports it by relative
+path. `payloads.json` is extracted from the switch by
+`scripts/extract-payloads.mjs`. `schemas.json` comes from
 `scripts/extract-schemas.mjs`, which runs the TypeScript checker over the
 upstream frontend source (with zod at upstream's version) and expands the
 types at each typed `invoke` call. `vendor.sh` needs `node` and `npm` for it.
@@ -350,18 +352,19 @@ with `WF_TEST_CA_BUNDLE=<file>` when that proxy has its own CA.
 ### Upgrading upstream
 
 ```sh
-scripts/vendor.sh v3.11.0           # copies files, rewrites UPSTREAM_TAG and src/contract.ts
+scripts/vendor.sh v3.11.0           # copies files, copies config/timeouts.json, rewrites UPSTREAM_TAG and src/contract.ts
 ```
 
 `vendor.sh` stops if `core.ts` imports a module that has no shim yet. The
 `Upstream drift` workflow does this weekly: it re-vendors, runs every check
 (the integration test runs against the new image), and opens a PR with the
-`core.ts` diff. For it to open PRs, enable _Settings → Actions → General →
-Allow GitHub Actions to create and approve pull requests_. PRs opened by the
-workflow token do not start CI on their own; push a commit or re-run CI on the
-PR before merging. When `core.ts` is unchanged and every check passed, the
-workflow starts CI itself and sets the PR to auto-merge, which needs _Settings
-→ General → Pull Requests → Allow auto-merge_.
+`core.ts` and timeout policy (`invoke-timeout.ts`, `config/timeouts.json`)
+diffs. For it to open PRs, enable _Settings → Actions → General → Allow GitHub
+Actions to create and approve pull requests_. PRs opened by the workflow token
+do not start CI on their own; push a commit or re-run CI on the PR before
+merging. When `core.ts` and the timeout policy are unchanged and every check
+passed, the workflow starts CI itself and sets the PR to auto-merge, which
+needs _Settings → General → Pull Requests → Allow auto-merge_.
 
 ### Releasing
 
@@ -380,5 +383,5 @@ release title names the Wealthfolio version from `UPSTREAM_TAG`, for example
 ## License
 
 AGPL-3.0-only (see [LICENSE](LICENSE)), the same license as Wealthfolio.
-The files under `vendor/upstream/` are copied from Wealthfolio and keep
+The files under `vendor/upstream/` and `config/` are copied from Wealthfolio and keep
 their upstream copyright.

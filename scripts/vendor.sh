@@ -5,6 +5,9 @@
 #
 # Copies the upstream files unchanged into vendor/upstream/<tag>/, removes the
 # previously vendored tag, and rewrites UPSTREAM_TAG and src/contract.ts.
+# invoke-timeout.ts imports ../../../../config/timeouts.json, which resolves to
+# config/timeouts.json at the repo root both upstream and here, so that file is
+# copied to <root>/config/ instead of vendor/.
 # Needs `pnpm install` first (payload extraction uses typescript).
 # Set UPSTREAM_REPO to fetch from another remote (default: upstream GitHub).
 set -euo pipefail
@@ -15,6 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="apps/frontend/src/adapters"
 # Upstream files copied verbatim. Paths are relative to $SRC_DIR.
 FILES=("web/core.ts" "web/export-options.ts" "invoke-timeout.ts")
+TIMEOUTS="config/timeouts.json"
 # The only imports core.ts may have. A new import needs a new shim.
 EXPECTED_IMPORTS='"@/features/profiles/session"
 "@/lib/auth-token"
@@ -31,7 +35,7 @@ git -C "$WORK" init -q
 git -C "$WORK" remote add origin "$REPO"
 git -C "$WORK" config core.sparseCheckout true
 # The whole frontend source: its typed invoke calls give payload and result types.
-printf '%s\n' "apps/frontend/src/" "apps/frontend/package.json" >"$WORK/.git/info/sparse-checkout"
+printf '%s\n' "apps/frontend/src/" "apps/frontend/package.json" "$TIMEOUTS" >"$WORK/.git/info/sparse-checkout"
 git -C "$WORK" fetch -q --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
 git -C "$WORK" checkout -q "tags/$TAG"
 COMMIT="$(git -C "$WORK" rev-parse HEAD)"
@@ -46,6 +50,11 @@ if [ "$actual_imports" != "$(echo "$EXPECTED_IMPORTS" | sort)" ]; then
   exit 1
 fi
 
+if [ ! -f "$WORK/$TIMEOUTS" ]; then
+  echo "$TIMEOUTS is missing at $TAG. Check whether invoke-timeout.ts still imports it." >&2
+  exit 1
+fi
+
 DEST="$ROOT/vendor/upstream/$TAG"
 rm -rf "$ROOT/vendor/upstream"
 mkdir -p "$DEST/adapters"
@@ -53,6 +62,10 @@ for f in "${FILES[@]}"; do
   mkdir -p "$(dirname "$DEST/adapters/$f")"
   cp "$WORK/$SRC_DIR/$f" "$DEST/adapters/$f"
 done
+
+rm -f "$ROOT/$TIMEOUTS"
+mkdir -p "$ROOT/config"
+cp "$WORK/$TIMEOUTS" "$ROOT/$TIMEOUTS"
 
 # core.ts uses only the Logger type from ../types. Upstream types.ts pulls in
 # the whole frontend type graph, so this one file is generated, not copied.
@@ -67,15 +80,12 @@ TS
   echo "  \"tag\": \"$TAG\","
   echo "  \"commit\": \"$COMMIT\","
   echo "  \"files\": {"
-  n=${#FILES[@]}
-  i=0
   for f in "${FILES[@]}"; do
-    i=$((i + 1))
     sum="$(sha256sum "$DEST/adapters/$f" | cut -d' ' -f1)"
-    sep=","
-    [ "$i" -eq "$n" ] && sep=""
-    echo "    \"$SRC_DIR/$f\": \"$sum\"$sep"
+    echo "    \"$SRC_DIR/$f\": \"$sum\","
   done
+  timeouts_sum="$(sha256sum "$ROOT/$TIMEOUTS" | cut -d' ' -f1)"
+  echo "    \"$TIMEOUTS\": \"$timeouts_sum\""
   echo "  }"
   echo "}"
 } >"$DEST/SOURCE.json"
